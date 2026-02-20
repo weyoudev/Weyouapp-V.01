@@ -1,0 +1,107 @@
+%PDF-1.1
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents 4 0 R >> endobj
+4 0 obj << /Length 1294 >> stream
+BT
+/F1 11 Tf
+50 750 Td
+(INVOICE) Tj
+0 -14 Td
+50 736 Td
+(Type: FINAL) Tj
+0 -14 Td
+50 722 Td
+(Invoice #: fa66f3d6-2d2d-488b-9d27-967941a26b0e) Tj
+0 -14 Td
+50 708 Td
+(Order ID: 538b7556-ad56-40f3-887b-3b25abfc6864) Tj
+0 -14 Td
+50 694 Td
+(Issued: 2026-02-16T01:18:15.504Z) Tj
+0 -14 Td
+50 680 Td
+() Tj
+0 -14 Td
+50 666 Td
+(Business:) Tj
+0 -14 Td
+50 652 Td
+(We You Laundry) Tj
+0 -14 Td
+50 638 Td
+(Demo Address) Tj
+0 -14 Td
+50 624 Td
+(+91-9000000000) Tj
+0 -14 Td
+50 610 Td
+(Note: Thank you!) Tj
+0 -14 Td
+50 596 Td
+() Tj
+0 -14 Td
+50 582 Td
+(Customer:) Tj
+0 -14 Td
+50 568 Td
+(Karthik Burra) Tj
+0 -14 Td
+50 554 Td
+(+919999999999) Tj
+0 -14 Td
+50 540 Td
+() Tj
+0 -14 Td
+50 526 Td
+(Items:) Tj
+0 -14 Td
+50 512 Td
+(  Subscription usage x 3 @ 0.00 = 0.00) Tj
+0 -14 Td
+50 498 Td
+() Tj
+0 -14 Td
+50 484 Td
+(Subtotal: 0.00) Tj
+0 -14 Td
+50 470 Td
+(Tax: 0.00) Tj
+0 -14 Td
+50 456 Td
+(Total: 0.00) Tj
+0 -14 Td
+50 442 Td
+() Tj
+0 -14 Td
+50 428 Td
+(          Demo Address | vudev2025@gmail.com | +91-9000000000) Tj
+0 -14 Td
+50 414 Td
+(       It's a computer generated invoice, Signature not required.) Tj
+0 -14 Td
+50 400 Td
+() Tj
+0 -14 Td
+50 386 Td
+(UPI ID: merchant@upi) Tj
+0 -14 Td
+50 372 Td
+(Pay to: Laundry Demo) Tj
+0 -14 Td
+50 358 Td
+(QR code available at: /api/assets/branding/1771136133375-images.png) Tj
+0 -14 Td
+ET
+endstream endobj
+xref
+0 5
+0000000000 65535 f 
+         9 00000 n 
+        58 00000 n 
+       115 00000 n 
+       290 00000 n 
+trailer << /Size 5 /Root 1 0 R >>
+startxref
+1636
+%%EOF

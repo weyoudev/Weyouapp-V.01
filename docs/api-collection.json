@@ -1,0 +1,277 @@
+{
+  "info": {
+    "name": "Laundry API Collection",
+    "_postman_id": "laundry-api-collection",
+    "description": "MVP Laundry backend REST endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api" },
+    { "key": "tokenCustomer", "value": "" },
+    { "key": "tokenAdmin", "value": "" },
+    { "key": "tokenBilling", "value": "" },
+    { "key": "addressId", "value": "" },
+    { "key": "subscriptionId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "invoiceId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Customer OTP request",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/customer/otp/request", "host": ["{{baseUrl}}"], "path": ["auth", "customer", "otp", "request"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"+919999999999\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Customer OTP verify",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/customer/otp/verify", "host": ["{{baseUrl}}"], "path": ["auth", "customer", "otp", "verify"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"+919999999999\",\n  \"otp\": \"123456\",\n  \"requestId\": \"req-+919999999999\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Admin login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/admin/login", "host": ["{{baseUrl}}"], "path": ["auth", "admin", "login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@laundry.local\",\n  \"password\": \"dev-hash\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create order (customer)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tokenCustomer}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceType\": \"WASH_FOLD\",\n  \"addressId\": \"{{addressId}}\",\n  \"pickupDate\": \"2026-02-11T10:00:00.000Z\",\n  \"timeWindow\": \"10:00-12:00\",\n  \"estimatedWeightKg\": 3,\n  \"subscriptionId\": \"{{subscriptionId}}\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Update order status (admin/ops)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/orders/{{orderId}}/status", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}", "status"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"PICKUP_SCHEDULED\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create invoice draft",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tokenBilling}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/orders/{{orderId}}/invoice/draft", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}", "invoice", "draft"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    { \"type\": \"SERVICE\", \"name\": \"Wash & Fold\", \"quantity\": 1, \"unitPrice\": 1000 },\n    { \"type\": \"FEE\", \"name\": \"Pickup fee\", \"quantity\": 1, \"unitPrice\": 200 },\n    { \"type\": \"DISCOUNT\", \"name\": \"Promo\", \"quantity\": 1, \"unitPrice\": -100 }\n  ],\n  \"tax\": 0\n}"
+        }
+      }
+    },
+    {
+      "name": "Finalize invoice",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tokenBilling}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/orders/{{orderId}}/invoice/finalize", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}", "invoice", "finalize"] }
+      }
+    },
+    {
+      "name": "Generate invoice PDF",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tokenBilling}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/orders/{{orderId}}/invoice/generate-pdf", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}", "invoice", "generate-pdf"] }
+      }
+    },
+    {
+      "name": "GET invoice PDF",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenBilling}}" }],
+        "url": { "raw": "{{baseUrl}}/invoices/{{invoiceId}}/pdf", "host": ["{{baseUrl}}"], "path": ["invoices", "{{invoiceId}}", "pdf"] }
+      }
+    },
+    {
+      "name": "ACK invoice draft",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tokenBilling}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/admin/orders/{{orderId}}/ack-invoice/draft", "host": ["{{baseUrl}}"], "path": ["admin", "orders", "{{orderId}}", "ack-invoice", "draft"] },
+        "body": { "mode": "raw", "raw": "{\n  \"items\": [\n    { \"type\": \"SERVICE\", \"name\": \"Wash & Fold\", \"quantity\": 1, \"unitPricePaise\": 10000 },\n    { \"type\": \"FEE\", \"name\": \"Pickup fee\", \"quantity\": 1, \"unitPricePaise\": 2000 }\n  ],\n  \"taxPaise\": 0\n}" }
+      }
+    },
+    {
+      "name": "ACK invoice issue",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenBilling}}" }],
+        "url": { "raw": "{{baseUrl}}/admin/orders/{{orderId}}/ack-invoice/issue", "host": ["{{baseUrl}}"], "path": ["admin", "orders", "{{orderId}}", "ack-invoice", "issue"] }
+      }
+    },
+    {
+      "name": "FINAL invoice draft",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tokenBilling}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/admin/orders/{{orderId}}/final-invoice/draft", "host": ["{{baseUrl}}"], "path": ["admin", "orders", "{{orderId}}", "final-invoice", "draft"] },
+        "body": { "mode": "raw", "raw": "{\n  \"items\": [\n    { \"type\": \"SERVICE\", \"name\": \"Wash & Fold\", \"quantity\": 1, \"unitPricePaise\": 10000 },\n    { \"type\": \"FEE\", \"name\": \"Delivery fee\", \"quantity\": 1, \"unitPricePaise\": 1500 }\n  ],\n  \"taxPaise\": 0\n}" }
+      }
+    },
+    {
+      "name": "FINAL invoice issue",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenBilling}}" }],
+        "url": { "raw": "{{baseUrl}}/admin/orders/{{orderId}}/final-invoice/issue", "host": ["{{baseUrl}}"], "path": ["admin", "orders", "{{orderId}}", "final-invoice", "issue"] }
+      }
+    },
+    {
+      "name": "Update payment (admin/billing)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tokenBilling}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/admin/orders/{{orderId}}/payment", "host": ["{{baseUrl}}"], "path": ["admin", "orders", "{{orderId}}", "payment"] },
+        "body": { "mode": "raw", "raw": "{\n  \"provider\": \"CASH\",\n  \"status\": \"CAPTURED\",\n  \"amountPaise\": 11500,\n  \"note\": \"Paid on delivery\"\n}" }
+      }
+    },
+    {
+      "name": "Analytics revenue",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenBilling}}" }],
+        "url": { "raw": "{{baseUrl}}/admin/analytics/revenue?preset=TODAY", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "revenue"], "query": [{ "key": "preset", "value": "TODAY" }] }
+      }
+    },
+    {
+      "name": "Branding upload logo",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenBilling}}" }],
+        "url": { "raw": "{{baseUrl}}/admin/branding/logo", "host": ["{{baseUrl}}"], "path": ["admin", "branding", "logo"] },
+        "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": [] }] }
+      }
+    },
+    {
+      "name": "Branding upload UPI QR",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenBilling}}" }],
+        "url": { "raw": "{{baseUrl}}/admin/branding/upi-qr", "host": ["{{baseUrl}}"], "path": ["admin", "branding", "upi-qr"] },
+        "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": [] }] }
+      }
+    },
+    {
+      "name": "Feedback eligibility (order)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenCustomer}}" }],
+        "url": { "raw": "{{baseUrl}}/orders/{{orderId}}/feedback/eligibility", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}", "feedback", "eligibility"] }
+      }
+    },
+    {
+      "name": "Submit order feedback (customer)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tokenCustomer}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/orders/{{orderId}}/feedback", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}", "feedback"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"rating\": 5,\n  \"tags\": [\"quality\", \"delivery\"],\n  \"message\": \"Great service!\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Submit general feedback (customer)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tokenCustomer}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/feedback", "host": ["{{baseUrl}}"], "path": ["feedback"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"rating\": 4,\n  \"tags\": [\"app\"],\n  \"message\": \"Nice app\"\n}"
+        }
+      }
+    },
+    {
+      "name": "List my feedback (customer)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenCustomer}}" }],
+        "url": { "raw": "{{baseUrl}}/feedback", "host": ["{{baseUrl}}"], "path": ["feedback"] }
+      }
+    },
+    {
+      "name": "Admin list feedback",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+        "url": { "raw": "{{baseUrl}}/admin/feedback?limit=20", "host": ["{{baseUrl}}"], "path": ["admin", "feedback"], "query": [{ "key": "limit", "value": "20" }] }
+      }
+    },
+    {
+      "name": "Admin update feedback status",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/admin/feedback/:feedbackId", "host": ["{{baseUrl}}"], "path": ["admin", "feedback", ":feedbackId"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"REVIEWED\",\n  \"adminNotes\": \"Noted\"\n}"
+        }
+      }
+    }
+  ]
+}
+

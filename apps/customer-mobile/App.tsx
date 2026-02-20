@@ -1,0 +1,4539 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  Dimensions,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
+import { WebView } from 'react-native-webview';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import {
+  checkServiceability,
+  submitAreaRequest,
+  requestOtp,
+  verifyOtp,
+  getMe,
+  updateMe,
+  listAddresses,
+  createAddress,
+  updateAddress,
+  deleteAddress,
+  getSlotAvailability,
+  createOrder,
+  listOrders,
+  getOrder,
+  listOrderInvoices,
+  fetchInvoicePdfBase64,
+  getAvailablePlans,
+  getPublicBranding,
+  brandingLogoFullUrl,
+  brandingWelcomeBackgroundFullUrl,
+  getPublicCarousel,
+  carouselImageFullUrl,
+  purchaseSubscription,
+  registerPushToken,
+  type BackendAddress,
+  type PublicBrandingResponse,
+  type OrderSummary,
+  type OrderDetail,
+  type OrderInvoice,
+  type AvailablePlanItem,
+  type ActiveSubscriptionItem,
+  type PastSubscriptionItem,
+  getSubscriptionDetail,
+  type SubscriptionDetailResponse,
+} from './src/api';
+import { getStoredToken, setStoredToken, clearStoredToken } from './src/authStorage';
+import { SERVICE_TYPES, type ServiceTypeId } from './src/types';
+import { parseLatLngFromMapsUrl, reverseGeocodeAddress } from './src/googlePlaces';
+
+type Step = 'phone' | 'otp' | 'profile' | 'done';
+type HomeScreen = 'home' | 'subscriptions' | 'subscriptionDetail' | 'addresses' | 'addAddress' | 'areaRequestSent' | 'bookPickup' | 'myOrders' | 'orderDetail' | 'profile';
+type OrderFilter = 'all' | 'walk_in' | 'individual' | 'subscription';
+type BookingStep = 'services' | 'address' | 'date' | 'time' | 'confirm';
+
+function orderStatusLabel(status: string): string {
+  const s = (status || '').toUpperCase().replace(/-/g, '_');
+  const map: Record<string, string> = {
+    BOOKING_CONFIRMED: 'Booking confirmed',
+    PICKUP_SCHEDULED: 'Scheduled Pick up',
+    PICKED_UP: 'Picked up',
+    IN_PROCESSING: 'In progress',
+    READY: 'Ready',
+    OUT_FOR_DELIVERY: 'Out for delivery',
+    DELIVERED: 'Delivered',
+    CANCELLED: 'Cancelled',
+  };
+  return map[s] ?? status;
+}
+
+function serviceTypeDisplayLabel(serviceType: string): string {
+  const s = (serviceType || '').toUpperCase().replace(/-/g, '_').trim();
+  const map: Record<string, string> = {
+    WASH_FOLD: 'Wash and Fold',
+    WASH_IRON: 'Wash and Iron',
+    DRY_CLEAN: 'Dry cleaning',
+    STEAM_IRON: 'Steam Iron',
+    SHOES: 'Shoes',
+    HOME_LINEN: 'Home linen',
+    ADD_ONS: 'Add-ons',
+  };
+  return (map[s] ?? String(serviceType)).replace(/_/g, ' ');
+}
+
+export default function App() {
+  const [step, setStep] = useState<Step>('phone');
+  const [initializing, setInitializing] = useState(true);
+  const [homeScreen, setHomeScreen] = useState<HomeScreen>('home');
+
+  const [countryCode, setCountryCode] = useState('+91');
+  const [mobile, setMobile] = useState('');
+  const phone = (countryCode.trim().startsWith('+') ? countryCode.trim() : '+' + countryCode.trim()) + mobile.replace(/\D/g, '');
+  const [otp, setOtp] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+
+  const [token, setToken] = useState<string | null>(null);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<ServiceTypeId[]>([]);
+  const [addresses, setAddresses] = useState<BackendAddress[]>([]);
+  const [addressesLoading, setAddressesLoading] = useState(false);
+  const [addAddressLabel, setAddAddressLabel] = useState('');
+  const [addAddressLine, setAddAddressLine] = useState('');
+  const [addHouseNo, setAddHouseNo] = useState('');
+  const [addStreetArea, setAddStreetArea] = useState('');
+  const [addCity, setAddCity] = useState('');
+  const [addPincode, setAddPincode] = useState('');
+  const [addGoogleUrl, setAddGoogleUrl] = useState('');
+  const [showGoogleMapsPicker, setShowGoogleMapsPicker] = useState(false);
+  const [lastGoogleMapsUrl, setLastGoogleMapsUrl] = useState('');
+  const [addFromMapsLoading, setAddFromMapsLoading] = useState(false);
+  const [addIsDefault, setAddIsDefault] = useState(false);
+  const [serviceability, setServiceability] = useState<{ serviceable: boolean; message?: string } | null>(null);
+  const [checkingServiceability, setCheckingServiceability] = useState(false);
+  const [areaRequestSent, setAreaRequestSent] = useState(false);
+  const [bookingStep, setBookingStep] = useState<BookingStep>('address');
+  const [bookingAddressId, setBookingAddressId] = useState<string | null>(null);
+  const [bookingAddress, setBookingAddress] = useState<BackendAddress | null>(null);
+  const [bookingDate, setBookingDate] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [bookingTimeSlot, setBookingTimeSlot] = useState('');
+  const [slotAvailability, setSlotAvailability] = useState<{
+    isHoliday: boolean;
+    timeSlots: string[];
+    branchName?: string;
+  } | null>(null);
+  const [slotAvailabilityLoading, setSlotAvailabilityLoading] = useState(false);
+  const [bookingSuccessOrderId, setBookingSuccessOrderId] = useState<string | null>(null);
+  const [orders, setOrdersList] = useState<OrderSummary[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [orderDetail, setOrderDetail] = useState<OrderDetail | null>(null);
+  const [orderInvoices, setOrderInvoices] = useState<OrderInvoice[]>([]);
+  const [invoiceLoadingId, setInvoiceLoadingId] = useState<string | null>(null);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [meData, setMeData] = useState<{ activeSubscriptions: ActiveSubscriptionItem[]; pastSubscriptions: PastSubscriptionItem[] } | null>(null);
+  const [availablePlans, setAvailablePlans] = useState<AvailablePlanItem[]>([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
+  const [subscriptionPurchaseAddressId, setSubscriptionPurchaseAddressId] = useState<string | null>(null);
+  /** Selected address on Plans page (for branch message and filtering available plans). */
+  const [plansAddressId, setPlansAddressId] = useState<string | null>(null);
+  /** Branch serving the selected address's pincode (from serviceability). */
+  const [plansBranchInfo, setPlansBranchInfo] = useState<{ branchId: string; branchName: string } | null>(null);
+  const [plansBranchLoading, setPlansBranchLoading] = useState(false);
+  /** Tab on Plans page: Active plan(s) vs Completed. */
+  const [subscriptionPlansTab, setSubscriptionPlansTab] = useState<'active' | 'completed'>('active');
+  const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null);
+  const [subscriptionDetail, setSubscriptionDetail] = useState<SubscriptionDetailResponse | null>(null);
+  const [subscriptionDetailLoading, setSubscriptionDetailLoading] = useState(false);
+  const [subscriptionInvoicePreviewUri, setSubscriptionInvoicePreviewUri] = useState<string | null>(null);
+  const [notificationsModalVisible, setNotificationsModalVisible] = useState(false);
+  const [subscriptionInvoiceLoading, setSubscriptionInvoiceLoading] = useState(false);
+  const [subscriptionInvoiceError, setSubscriptionInvoiceError] = useState<string | null>(null);
+  const [orderFilter, setOrderFilter] = useState<OrderFilter>('all');
+  const [bookingSubscriptionId, setBookingSubscriptionId] = useState<string | null>(null);
+  const [bookingSubscriptionValidFrom, setBookingSubscriptionValidFrom] = useState<string | null>(null);
+  const [bookingSubscriptionValidTill, setBookingSubscriptionValidTill] = useState<string | null>(null);
+  /** Ref so address step knows we came from subscription even if state was reset (e.g. hot reload). */
+  const bookingFromSubscriptionRef = useRef(false);
+  /** ScrollView ref for Plans page (used to scroll to address section on "Change address"). */
+  const plansScrollViewRef = useRef<ScrollView>(null);
+  /** When true, highlight the address chips section on Plans page (after "Change address" in purchase confirm). */
+  const [highlightPlansAddressSection, setHighlightPlansAddressSection] = useState(false);
+  /** Custom modal for "Confirm subscription" (replaces native Alert so design matches app). */
+  const [purchaseConfirm, setPurchaseConfirm] = useState<{ planId: string; planName: string; addressId: string; addressLabel: string } | null>(null);
+  const [returnToBookPickupAddress, setReturnToBookPickupAddress] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  /** Exclude walk-in addresses from saved-address lists (backend may set source: 'WALK_IN'). */
+  const savedAddresses = useMemo(
+    () => addresses.filter((a) => (a as BackendAddress & { source?: string }).source !== 'WALK_IN'),
+    [addresses]
+  );
+
+  /** Address IDs that have at least one active order (not DELIVERED/CANCELLED). Used to block edit/delete. */
+  const addressIdsWithActiveOrder = useMemo(() => {
+    const active = orders.filter((o) => {
+      const s = (o.status || '').toUpperCase();
+      return s !== 'DELIVERED' && s !== 'CANCELLED';
+    });
+    const ids = new Set<string>();
+    active.forEach((o) => {
+      const aid = (o as OrderSummary & { addressId?: string }).addressId;
+      if (aid) ids.add(aid);
+    });
+    return ids;
+  }, [orders]);
+
+  /** Available plans for the selected address's branch: common plans (no branchIds) + plans for that branch. */
+  const plansForSelectedBranch = useMemo(() => {
+    const branchId = plansBranchInfo?.branchId;
+    return availablePlans.filter((plan) => {
+      const ids = plan.branchIds ?? [];
+      return ids.length === 0 || (branchId != null && ids.includes(branchId));
+    });
+  }, [availablePlans, plansBranchInfo?.branchId]);
+
+  /** Notifications derived from orders and subscriptions (booking confirmed, picked up, invoice, payment, delivered, subscription activated). */
+  const notificationsList = useMemo(() => {
+    type Notif = { id: string; title: string; body: string; sortDate: string; orderId?: string; subscriptionId?: string };
+    const list: Notif[] = [];
+    const statusToTitle: Record<string, string> = {
+      BOOKING_CONFIRMED: 'Booking confirmed',
+      PICKUP_SCHEDULED: 'Booking confirmed',
+      PICKED_UP: 'Order picked up',
+      IN_PROCESSING: 'In progress',
+      READY: 'Order ready',
+      OUT_FOR_DELIVERY: 'Out for delivery',
+      DELIVERED: 'Delivered',
+      CANCELLED: 'Order cancelled',
+    };
+    orders.forEach((o) => {
+      const s = (o.status || '').toUpperCase().replace(/-/g, '_');
+      const created = o.createdAt || '';
+      const orderLabel = `Order #${(o.id || '').slice(-8)}`;
+      const title = statusToTitle[s] || o.status || 'Order update';
+      list.push({ id: `order-${o.id}-status`, title, body: orderLabel, sortDate: created, orderId: o.id });
+      if (s !== 'CANCELLED' && (o.paymentStatus || '').toUpperCase() === 'CAPTURED') {
+        list.push({ id: `order-${o.id}-payment`, title: 'Payment recorded', body: orderLabel, sortDate: created, orderId: o.id });
+      }
+      if (['IN_PROCESSING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(s)) {
+        list.push({ id: `order-${o.id}-ack`, title: 'Acknowledgement invoice available', body: orderLabel, sortDate: created, orderId: o.id });
+      }
+    });
+    (meData?.activeSubscriptions ?? []).forEach((sub) => {
+      list.push({
+        id: `sub-${sub.id}`,
+        title: 'Subscription activated',
+        body: sub.planName || 'Plan',
+        sortDate: sub.validityStartDate || sub.validTill || '',
+        subscriptionId: sub.id,
+      });
+    });
+    list.sort((a, b) => (a.sortDate > b.sortDate ? -1 : a.sortDate < b.sortDate ? 1 : 0));
+    return list;
+  }, [orders, meData?.activeSubscriptions]);
+
+  /** Prefill houseNo, streetArea, city for edit: use stored fields when present, else parse from addressLine. */
+  const prefillAddressFields = useCallback((a: BackendAddress) => {
+    const h = (a.houseNo != null && String(a.houseNo).trim() !== '') ? String(a.houseNo).trim() : '';
+    const s = (a.streetArea != null && String(a.streetArea).trim() !== '') ? String(a.streetArea).trim() : '';
+    const c = (a.city != null && String(a.city).trim() !== '') ? String(a.city).trim() : '';
+    if (h !== '' || s !== '' || c !== '') return { houseNo: h, streetArea: s, city: c };
+    const line = (a.addressLine != null && String(a.addressLine).trim() !== '') ? String(a.addressLine).trim() : '';
+    const parts = line.split(',').map((p: string) => p.trim()).filter(Boolean);
+    return {
+      houseNo: parts.length >= 1 ? parts[0] : '',
+      streetArea: parts.length >= 2 ? parts[1] : '',
+      city: parts.length >= 1 ? parts[parts.length - 1] : '',
+    };
+  }, []);
+
+  const [welcomeBranding, setWelcomeBranding] = useState<PublicBrandingResponse | null>(null);
+  const [acceptedTermsAndPrivacy, setAcceptedTermsAndPrivacy] = useState(false);
+  const [legalModalContent, setLegalModalContent] = useState<{ title: string; body: string } | null>(null);
+  const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
+  const [userPhone, setUserPhone] = useState<string>('');
+  const [carouselImageUrls, setCarouselImageUrls] = useState<string[]>([]);
+  const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [carouselPage, setCarouselPage] = useState(0);
+  const carouselScrollRef = useRef<ScrollView>(null);
+  const carouselPageRef = useRef(0);
+  const googleMapsWebViewRef = useRef<WebView>(null);
+  const onMapsUrlReceivedRef = useRef<((url: string) => void) | null>(null);
+
+  useEffect(() => {
+    if (step === 'phone') {
+      getPublicBranding().then(setWelcomeBranding);
+      setAcceptedTermsAndPrivacy(false);
+    }
+    if (step === 'done') {
+      getPublicBranding().then(setWelcomeBranding);
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (step !== 'done') return;
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        getPublicBranding().then(setWelcomeBranding);
+      }
+    });
+    return () => sub.remove();
+  }, [step]);
+
+  // Register for push notifications (lock screen) when user is logged in
+  useEffect(() => {
+    if (step !== 'done' || !token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const Notifications = await import('expo-notifications');
+        const Device = await import('expo-device');
+        if (!Device.default.isDevice) return;
+        const { status: existing } = await Notifications.getPermissionsAsync();
+        let final = existing;
+        if (existing !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          final = status;
+        }
+        if (final !== 'granted' || cancelled) return;
+        const tokenData = await Notifications.getExpoPushTokenAsync();
+        const pushToken = tokenData?.data;
+        if (pushToken && !cancelled) await registerPushToken(token, pushToken);
+      } catch (_) {
+        // Notifications not available (e.g. web) or permission denied
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [step, token]);
+
+  const fetchCarousel = useCallback(() => {
+    getPublicCarousel().then((r) => setCarouselImageUrls(r.imageUrls ?? []));
+  }, []);
+
+  useEffect(() => {
+    if (step === 'done' && homeScreen === 'home') {
+      fetchCarousel();
+    }
+  }, [step, homeScreen, fetchCarousel]);
+
+  useEffect(() => {
+    setCarouselPage(0);
+    carouselPageRef.current = 0;
+  }, [carouselImageUrls.length]);
+
+  const onHomeRefresh = useCallback(() => {
+    setHomeRefreshing(true);
+    Promise.all([getPublicCarousel(), getPublicBranding()])
+      .then(([carouselRes, branding]) => {
+        setCarouselImageUrls(carouselRes.imageUrls ?? []);
+        setWelcomeBranding(branding);
+      })
+      .finally(() => setHomeRefreshing(false));
+  }, []);
+
+  useEffect(() => {
+    if (step !== 'done' || homeScreen !== 'home') return;
+    const pollMs = 30 * 1000;
+    const id = setInterval(fetchCarousel, pollMs);
+    return () => clearInterval(id);
+  }, [step, homeScreen, fetchCarousel]);
+
+  useEffect(() => {
+    if (step !== 'done' || homeScreen !== 'home') return;
+    const total = carouselImageUrls.length > 0 ? carouselImageUrls.length : 3;
+    if (total <= 1) return;
+    const winW = Dimensions.get('window').width;
+    const id = setInterval(() => {
+      const next = (carouselPageRef.current + 1) % total;
+      carouselPageRef.current = next;
+      setCarouselPage(next);
+      carouselScrollRef.current?.scrollTo({
+        x: next * winW,
+        animated: true,
+      });
+    }, 5000);
+    return () => clearInterval(id);
+  }, [step, homeScreen, carouselImageUrls.length]);
+
+  useEffect(() => {
+    if (step === 'done' && homeScreen === 'addresses' && token) {
+      fetchAddresses();
+    }
+  }, [step, homeScreen, token, fetchAddresses]);
+
+  useEffect(() => {
+    if (step === 'done' && homeScreen === 'subscriptions' && token) {
+      fetchAddresses();
+    }
+  }, [step, homeScreen, token, fetchAddresses]);
+
+  useEffect(() => {
+    if (step === 'done' && homeScreen === 'bookPickup' && bookingStep === 'address' && token) {
+      fetchAddresses();
+    }
+  }, [step, homeScreen, bookingStep, token, fetchAddresses]);
+
+  const fetchOrders = useCallback(async () => {
+    if (!token) return;
+    setOrdersLoading(true);
+    try {
+      const list = await listOrders(token);
+      setOrdersList(list);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load orders');
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (step === 'done' && (homeScreen === 'home' || homeScreen === 'myOrders' || homeScreen === 'addresses') && token) {
+      fetchOrders();
+    }
+  }, [step, homeScreen, token, fetchOrders]);
+
+  useEffect(() => {
+    if (step === 'done' && homeScreen === 'orderDetail' && token && selectedOrderId) {
+      fetchAddresses();
+      (async () => {
+        try {
+          const [order, invoices] = await Promise.all([
+            getOrder(token, selectedOrderId),
+            listOrderInvoices(token, selectedOrderId),
+          ]);
+          setOrderDetail(order);
+          setOrderInvoices(invoices);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to load order');
+        }
+      })();
+    }
+  }, [step, homeScreen, token, selectedOrderId, fetchAddresses]);
+
+  const fetchSubscriptionsData = useCallback(async () => {
+    if (!token) return;
+    setPlansLoading(true);
+    setPurchaseError(null);
+    setPurchaseSuccess(null);
+    try {
+      const [meRes, plans] = await Promise.all([getMe(token), getAvailablePlans(token)]);
+      setMeData({
+        activeSubscriptions: meRes.activeSubscriptions ?? [],
+        pastSubscriptions: meRes.pastSubscriptions ?? [],
+      });
+      setAvailablePlans(plans);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load subscriptions');
+    } finally {
+      setPlansLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (step === 'done' && (homeScreen === 'subscriptions' || homeScreen === 'bookPickup') && token) {
+      fetchSubscriptionsData();
+    }
+  }, [step, homeScreen, token, fetchSubscriptionsData]);
+
+  // Default plans address to first saved address when opening Plans with none selected
+  useEffect(() => {
+    if (homeScreen === 'subscriptions' && savedAddresses.length > 0 && plansAddressId == null) {
+      setPlansAddressId(savedAddresses[0].id);
+    }
+  }, [homeScreen, savedAddresses.length, plansAddressId]);
+
+  // Use chip-selected address as purchase address (no separate address selector in Available plans)
+  useEffect(() => {
+    if (plansAddressId) setSubscriptionPurchaseAddressId(plansAddressId);
+  }, [plansAddressId]);
+
+  // Fetch subscription detail when user opens subscription detail screen
+  useEffect(() => {
+    if (homeScreen !== 'subscriptionDetail' || !selectedSubscriptionId || !token) return;
+    let cancelled = false;
+    setSubscriptionDetailLoading(true);
+    setSubscriptionDetail(null);
+    getSubscriptionDetail(token, selectedSubscriptionId)
+      .then((d) => {
+        if (!cancelled) {
+          setSubscriptionDetail(d ?? null);
+          setSubscriptionDetailLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) { setSubscriptionDetail(null); setSubscriptionDetailLoading(false); }
+      });
+    return () => { cancelled = true; };
+  }, [homeScreen, selectedSubscriptionId, token]);
+
+  // When user taps "Change address" in purchase confirm: scroll Plans to top and highlight address section
+  useEffect(() => {
+    if (!highlightPlansAddressSection) return;
+    plansScrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    const t = setTimeout(() => setHighlightPlansAddressSection(false), 5000);
+    return () => clearTimeout(t);
+  }, [highlightPlansAddressSection]);
+
+  // When selected address changes on Plans page, resolve branch for that pincode
+  useEffect(() => {
+    if (plansAddressId == null) {
+      setPlansBranchInfo(null);
+      return;
+    }
+    const addr = savedAddresses.find((a) => a.id === plansAddressId);
+    if (!addr?.pincode) {
+      setPlansBranchInfo(null);
+      return;
+    }
+    let cancelled = false;
+    setPlansBranchLoading(true);
+    checkServiceability(addr.pincode.trim())
+      .then((res) => {
+        if (cancelled) return;
+        setPlansBranchLoading(false);
+        if (res.serviceable && res.branchId && res.branchName) {
+          setPlansBranchInfo({ branchId: res.branchId, branchName: res.branchName });
+        } else {
+          setPlansBranchInfo(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPlansBranchLoading(false);
+          setPlansBranchInfo(null);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [plansAddressId, savedAddresses]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const storedToken = await getStoredToken();
+        if (!storedToken) {
+          setStep('phone');
+          setInitializing(false);
+          return;
+        }
+        const me = await getMe(storedToken);
+        setToken(storedToken);
+        setName(me.user.name ?? '');
+        setEmail(me.user.email ?? '');
+        setUserPhone(me.user.phone ?? '');
+        if (me.user.name || me.user.email) {
+          setStep('done');
+        } else {
+          setStep('profile');
+        }
+      } catch (err) {
+        const isNetworkError =
+          (err instanceof TypeError && (err.message === 'Network request failed' || err.message?.includes('fetch'))) ||
+          (err instanceof Error && (err.message === 'Network request failed' || err.message?.includes('Network')));
+        if (isNetworkError || (err instanceof Error && err.message?.includes('Failed to load'))) {
+          await clearStoredToken();
+          setToken(null);
+          setStep('phone');
+          setError('Could not reach the server. Check that the API is running and your device is on the same network, then tap Retry.');
+        } else {
+          setStep('phone');
+          setError(err instanceof Error ? err.message : 'Something went wrong');
+        }
+      } finally {
+        setInitializing(false);
+      }
+    })();
+  }, []);
+
+  const validatePhone = (combined: string): string | null => {
+    const digits = combined.replace(/\D/g, '');
+    if (digits.length < 10) {
+      return 'Enter a valid mobile number (at least 10 digits).';
+    }
+    return null;
+  };
+
+  const validateOtp = (value: string): string | null => {
+    if (value.length !== 6) {
+      return 'OTP must be 6 digits.';
+    }
+    return null;
+  };
+
+  const hasLegalContent = Boolean(
+    welcomeBranding?.termsAndConditions?.trim() || welcomeBranding?.privacyPolicy?.trim()
+  );
+
+  const handleRetryConnection = async () => {
+    setError(null);
+    setInitializing(true);
+    try {
+      const storedToken = await getStoredToken();
+      if (storedToken) {
+        const me = await getMe(storedToken);
+        setToken(storedToken);
+        setName(me.user.name ?? '');
+        setEmail(me.user.email ?? '');
+        setUserPhone(me.user.phone ?? '');
+        if (me.user.name || me.user.email) {
+          setStep('done');
+        } else {
+          setStep('profile');
+        }
+      } else {
+        await getPublicBranding().then(setWelcomeBranding);
+      }
+    } catch (err) {
+      const isNetworkError =
+        (err instanceof TypeError && (err.message === 'Network request failed' || err.message?.includes('fetch'))) ||
+        (err instanceof Error && (err.message === 'Network request failed' || err.message?.includes('Network')));
+      if (isNetworkError || (err instanceof Error && err.message?.includes('Failed to load'))) {
+        setError('Could not reach the server. Check that the API is running and your device is on the same network, then tap Retry.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Something went wrong');
+      }
+    } finally {
+      setInitializing(false);
+    }
+  };
+
+  const handleRequestOtp = async () => {
+    setError(null);
+    const validationError = validatePhone(phone);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    if (hasLegalContent && !acceptedTermsAndPrivacy) {
+      setError('Please accept the Terms and Conditions and Privacy Policy to continue.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { requestId: rid } = await requestOtp(phone.trim());
+      setRequestId(rid);
+      setStep('otp');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    setError(null);
+    const phoneError = validatePhone(phone);
+    if (phoneError) {
+      setError(phoneError);
+      return;
+    }
+    const otpError = validateOtp(otp);
+    if (otpError) {
+      setError(otpError);
+      return;
+    }
+    setLoading(true);
+    try {
+      const { token: newToken } = await verifyOtp(phone.trim(), otp, requestId ?? undefined);
+      await setStoredToken(newToken);
+      setToken(newToken);
+      const me = await getMe(newToken);
+      setName(me.user.name ?? '');
+      setEmail(me.user.email ?? '');
+      setUserPhone(me.user.phone ?? '');
+      if (me.user.name || me.user.email) {
+        setStep('done');
+      } else {
+        setStep('profile');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    setError(null);
+    const nameTrim = name.trim();
+    const emailTrim = email.trim();
+    if (!token) return;
+    setLoading(true);
+    try {
+      await updateMe(token, {
+        name: nameTrim || undefined,
+        email: emailTrim || undefined,
+      });
+      setStep('done');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save profile.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSkipProfile = async () => {
+    setError(null);
+    const nameTrim = name.trim();
+    if (!token) {
+      setStep('done');
+      return;
+    }
+    setLoading(true);
+    try {
+      if (nameTrim) await updateMe(token, { name: nameTrim });
+      setStep('done');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to skip.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await clearStoredToken();
+      setToken(null);
+      setCountryCode('+91');
+      setMobile('');
+      setOtp('');
+      setRequestId(null);
+      setName('');
+      setEmail('');
+      setStep('phone');
+      setHomeScreen('home');
+      setSelectedServiceIds([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to log out.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAddresses = useCallback(async () => {
+    if (!token) return;
+    setAddressesLoading(true);
+    try {
+      const data = await listAddresses(token);
+      setAddresses(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load addresses');
+    } finally {
+      setAddressesLoading(false);
+    }
+  }, [token]);
+
+  const toggleService = (id: ServiceTypeId) => {
+    setSelectedServiceIds((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+    );
+  };
+
+  const checkPincodeServiceability = async () => {
+    const pc = addPincode.trim().replace(/\D/g, '').slice(0, 6);
+    if (pc.length !== 6) {
+      setServiceability(null);
+      return;
+    }
+    setCheckingServiceability(true);
+    setServiceability(null);
+    try {
+      const result = await checkServiceability(pc);
+      setServiceability({ serviceable: result.serviceable, message: result.message });
+    } catch {
+      setServiceability({ serviceable: false, message: 'Could not check serviceability' });
+    } finally {
+      setCheckingServiceability(false);
+    }
+  };
+
+  const handleSaveAddress = async () => {
+    setError(null);
+    const houseNo = addHouseNo.trim();
+    const streetArea = addStreetArea.trim();
+    const city = addCity.trim();
+    const googleUrl = addGoogleUrl.trim();
+    if (!houseNo) {
+      setError('Please enter House / Flat no.');
+      return;
+    }
+    if (!streetArea) {
+      setError('Please enter Street & area.');
+      return;
+    }
+    if (!city) {
+      setError('Please enter City.');
+      return;
+    }
+    if (!googleUrl) {
+      setError('Please add Google Maps link.');
+      return;
+    }
+    const addressLineParts = [houseNo, streetArea, addAddressLine.trim(), city].filter(Boolean);
+    const builtAddressLine = addressLineParts.length > 0 ? addressLineParts.join(', ') : addAddressLine.trim();
+    if (!builtAddressLine) {
+      setError('Please enter full address.');
+      return;
+    }
+    const pc = addPincode.trim().replace(/\D/g, '').slice(0, 6);
+    if (pc.length !== 6) {
+      setError('Please enter a valid 6-digit pincode.');
+      return;
+    }
+    const serviceable = serviceability?.serviceable ?? false;
+    if (!serviceable) {
+      setError('This pincode is not serviceable. Use "Request to serve my area" below.');
+      return;
+    }
+    if (!token) return;
+    setLoading(true);
+    const goBackAfterSave = returnToBookPickupAddress;
+    const editingId = editingAddressId;
+    try {
+      if (editingId) {
+        await updateAddress(token, editingId, {
+          label: addAddressLabel.trim() || 'Home',
+          addressLine: builtAddressLine,
+          pincode: pc,
+          isDefault: addIsDefault,
+          googleMapUrl: googleUrl,
+          houseNo,
+          streetArea,
+          city,
+        });
+        setEditingAddressId(null);
+      } else {
+        await createAddress(token, {
+          label: addAddressLabel.trim() || 'Home',
+          addressLine: builtAddressLine,
+          pincode: pc,
+          isDefault: addIsDefault,
+          googleMapUrl: googleUrl,
+          houseNo,
+          streetArea,
+          city,
+        });
+      }
+      setAddAddressLabel('');
+      setAddAddressLine('');
+      setAddHouseNo('');
+      setAddStreetArea('');
+      setAddCity('');
+      setAddPincode('');
+      setAddGoogleUrl('');
+      setServiceability(null);
+      if (goBackAfterSave) {
+        setReturnToBookPickupAddress(false);
+        setHomeScreen('bookPickup');
+        setBookingStep('address');
+        fetchAddresses();
+      } else {
+        setHomeScreen('addresses');
+        fetchAddresses();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : (editingId ? 'Failed to update address' : 'Failed to save address'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteAddress = (addressId: string) => {
+    if (addressIdsWithActiveOrder.has(addressId)) {
+      Alert.alert(
+        'Cannot delete',
+        'This address has active orders. Complete or cancel those orders first.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    Alert.alert(
+      'Delete address',
+      'Are you sure you want to delete this address?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!token) return;
+            setError(null);
+            setLoading(true);
+            try {
+              await deleteAddress(token, addressId);
+              if (bookingAddressId === addressId) {
+                setBookingAddressId(null);
+                setBookingAddress(null);
+              }
+              fetchAddresses();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Failed to delete address');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleBookingAddressSelect = (addr: BackendAddress) => {
+    setBookingAddressId(addr.id);
+    setBookingAddress(addr);
+    setBookingDate('');
+    setBookingTimeSlot('');
+    setSlotAvailability(null);
+    setBookingStep('date');
+  };
+
+  const handleBookingDateSelect = async (dateStr: string) => {
+    const address = bookingAddress ?? (bookingAddressId ? savedAddresses.find((a) => a.id === bookingAddressId) : null);
+    if (!address?.pincode) {
+      setError('Address not found. Please go back and select an address.');
+      return;
+    }
+    setError(null);
+    setBookingDate(dateStr);
+    setSlotAvailabilityLoading(true);
+    setSlotAvailability(null);
+    try {
+      const avail = await getSlotAvailability(address.pincode, dateStr);
+      if (avail.isHoliday) {
+        setSlotAvailability({ isHoliday: true, timeSlots: [], branchName: avail.branchName });
+      } else {
+        setSlotAvailability({
+          isHoliday: false,
+          timeSlots: avail.timeSlots,
+          branchName: avail.branchName,
+        });
+      }
+      if (!bookingAddress && address) setBookingAddress(address as BackendAddress);
+      setBookingStep('time');
+    } catch {
+      setError('Could not load time slots');
+    } finally {
+      setSlotAvailabilityLoading(false);
+    }
+  };
+
+  const handleBookingTimeSelect = (timeSlot: string) => {
+    setBookingTimeSlot(timeSlot);
+    setBookingStep('confirm');
+  };
+
+  const handleConfirmBooking = async () => {
+    if (!token || !bookingAddressId || !bookingDate || !bookingTimeSlot) return;
+    const isSubscriptionBooking = !!bookingSubscriptionId;
+    if (!isSubscriptionBooking && selectedServiceIds.length === 0) {
+      setError('Please select at least one service.');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const { orderId } = await createOrder(token, {
+        addressId: bookingAddressId,
+        pickupDate: bookingDate,
+        timeWindow: bookingTimeSlot,
+        orderType: isSubscriptionBooking ? 'SUBSCRIPTION' : 'INDIVIDUAL',
+        subscriptionId: bookingSubscriptionId ?? undefined,
+        selectedServices: selectedServiceIds,
+      });
+      setBookingSuccessOrderId(orderId);
+      setHomeScreen('bookPickup');
+      setBookingStep('services');
+      setSelectedServiceIds([]);
+      setBookingAddressId(null);
+      setBookingAddress(null);
+      setBookingDate('');
+      setBookingTimeSlot('');
+      setSlotAvailability(null);
+      bookingFromSubscriptionRef.current = false;
+      setBookingSubscriptionId(null);
+      setBookingSubscriptionValidFrom(null);
+      setBookingSubscriptionValidTill(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Booking failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAreaRequest = async () => {
+    setError(null);
+    const pc = addPincode.trim().replace(/\D/g, '').slice(0, 6);
+    if (pc.length !== 6 || !addAddressLine.trim()) {
+      setError('Enter pincode and address first.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await submitAreaRequest({
+        pincode: pc,
+        addressLine: addAddressLine.trim(),
+        customerName: name || undefined,
+        customerPhone: phone.trim() || undefined,
+        customerEmail: email || undefined,
+      });
+      setAreaRequestSent(true);
+      setHomeScreen('areaRequestSent');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit request');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  let content: JSX.Element | null = null;
+
+  if (initializing) {
+    content = (
+      <View style={styles.centered}>
+        <Text style={styles.title}>Loading…</Text>
+      </View>
+    );
+  } else if (step === 'phone') {
+    const logoUri = welcomeBranding?.logoUrl ? brandingLogoFullUrl(welcomeBranding.logoUrl) : null;
+    content = (
+      <View style={styles.welcomeScreenOuter}>
+        <LinearGradient
+          colors={['#7a2d7a', '#5c1a5c', '#3d0f3d']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={styles.welcomeCard}>
+        <View style={styles.welcomeHeader}>
+          {logoUri ? (
+            <Image
+              key={logoUri}
+              source={{ uri: logoUri }}
+              style={styles.welcomeLogo}
+              resizeMode="contain"
+              accessibilityLabel="Brand logo"
+            />
+          ) : (
+            <View style={styles.welcomeLogoPlaceholder}>
+              <Text style={styles.welcomeLogoPlaceholderText}>
+                {welcomeBranding?.businessName?.slice(0, 2)?.toUpperCase() ?? 'We'}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.welcomeSubtitle}>Enter your mobile number to continue.</Text>
+        </View>
+        {error && (
+          <>
+            <Text style={styles.error}>{error}</Text>
+            <TouchableOpacity style={[styles.button, styles.buttonSecondary, { marginTop: 8 }]} onPress={handleRetryConnection} disabled={initializing}>
+              <Text style={styles.buttonSecondaryText}>Retry</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        <View style={styles.row}>
+          <TextInput
+            style={[styles.input, styles.countryCodeInput]}
+            placeholder="+91"
+            keyboardType="phone-pad"
+            value={countryCode}
+            onChangeText={(value) => {
+              const d = value.replace(/\D/g, '').slice(0, 3);
+              setCountryCode(d ? '+' + d : '+91');
+            }}
+          />
+          <TextInput
+            style={[styles.input, styles.mobileInput]}
+            placeholder="9876543210"
+            keyboardType="phone-pad"
+            value={mobile}
+            onChangeText={(value) => setMobile(value.replace(/\D/g, '').slice(0, 10))}
+            maxLength={10}
+          />
+        </View>
+        {hasLegalContent && (
+          <View style={styles.termsPrivacyBlock}>
+            <View style={styles.checkboxRow}>
+              <TouchableOpacity
+                onPress={() => setAcceptedTermsAndPrivacy((v) => !v)}
+                activeOpacity={0.7}
+                style={styles.checkboxTouchTarget}
+              >
+                <View style={[styles.termsCheckbox, acceptedTermsAndPrivacy && styles.termsCheckboxChecked]}>
+                  {acceptedTermsAndPrivacy ? <MaterialIcons name="check" size={16} color={colors.white} /> : null}
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.checkboxLabel}>
+                I accept the{' '}
+                {welcomeBranding?.termsAndConditions?.trim() ? (
+                  <Text style={styles.linkText} onPress={() => setLegalModalContent({ title: 'Terms and Conditions', body: welcomeBranding!.termsAndConditions!.trim() })}>Terms and Conditions</Text>
+                ) : null}
+                {welcomeBranding?.termsAndConditions?.trim() && welcomeBranding?.privacyPolicy?.trim() ? ' and ' : null}
+                {welcomeBranding?.privacyPolicy?.trim() ? (
+                  <Text style={styles.linkText} onPress={() => setLegalModalContent({ title: 'Privacy Policy', body: welcomeBranding!.privacyPolicy!.trim() })}>Privacy Policy</Text>
+                ) : null}
+                .
+              </Text>
+            </View>
+          </View>
+        )}
+        <TouchableOpacity
+          style={[styles.button, styles.buttonPrimary, (loading || (hasLegalContent && !acceptedTermsAndPrivacy)) && styles.buttonDisabled]}
+          onPress={handleRequestOtp}
+          disabled={loading || (hasLegalContent && !acceptedTermsAndPrivacy)}
+        >
+          <Text style={styles.buttonText}>{loading ? 'Sending OTP…' : 'Send OTP'}</Text>
+        </TouchableOpacity>
+        <Modal visible={!!legalModalContent} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>{legalModalContent?.title ?? ''}</Text>
+              <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+                <Text style={styles.modalBody}>{legalModalContent?.body ?? ''}</Text>
+              </ScrollView>
+              <TouchableOpacity style={[styles.button, { marginTop: 12 }]} onPress={() => setLegalModalContent(null)}>
+                <Text style={styles.buttonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+        </View>
+      </View>
+    );
+  } else if (step === 'otp') {
+    content = (
+      <View style={styles.welcomeScreenOuter}>
+        <LinearGradient
+          colors={['#7a2d7a', '#5c1a5c', '#3d0f3d']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={styles.welcomeCard}>
+          <Text style={styles.title}>Verify OTP</Text>
+          <Text style={styles.subtitle}>We have sent an OTP to {phone}.</Text>
+          <Text style={[styles.subtitle, { fontSize: 12, marginTop: 4, opacity: 0.8 }]}>
+            Development: if SMS is not configured, use OTP 123456
+          </Text>
+          {error && <Text style={styles.error}>{error}</Text>}
+          <TextInput
+            style={styles.input}
+            placeholder="123456"
+            keyboardType="number-pad"
+            value={otp}
+            maxLength={6}
+            onChangeText={(value) => setOtp(value.replace(/\D/g, '').slice(0, 6))}
+          />
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.buttonSecondary, loading && styles.buttonDisabled]}
+              onPress={() => {
+                setOtp('');
+                setStep('phone');
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.buttonSecondaryText}>Change number</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.rowButton, loading && styles.buttonDisabled]}
+              onPress={handleVerifyOtp}
+              disabled={loading}
+            >
+              <Text style={styles.buttonText}>{loading ? 'Verifying…' : 'Verify'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  } else if (step === 'profile') {
+    content = (
+      <View style={styles.card}>
+        <Text style={styles.title}>Your Profile</Text>
+        <Text style={styles.subtitle}>Add your name and email (email optional). Or skip and go to Home.</Text>
+        {error && <Text style={styles.error}>{error}</Text>}
+        <TextInput
+          style={styles.input}
+          placeholder="Full name"
+          value={name}
+          onChangeText={setName}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Email (optional)"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleSaveProfile}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>{loading ? 'Saving…' : 'Save profile'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.textButton}
+          onPress={handleSkipProfile}
+          disabled={loading}
+        >
+          <Text style={styles.textButtonText}>Skip for now → Go to Home</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.textButton}
+          onPress={handleLogout}
+          disabled={loading}
+        >
+          <Text style={styles.textButtonText}>Log out</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  } else if (step === 'done') {
+    if (homeScreen === 'addresses') {
+      content = (
+        <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+          <View style={styles.card}>
+            <Text style={styles.title}>My Addresses</Text>
+            <Text style={styles.subtitle}>Add and manage your delivery addresses.</Text>
+            {error && <Text style={styles.error}>{error}</Text>}
+            {addressesLoading ? (
+              <Text style={styles.muted}>Loading…</Text>
+            ) : savedAddresses.length === 0 ? (
+              <Text style={styles.muted}>No addresses yet. Add one below.</Text>
+            ) : (
+              savedAddresses.map((a) => {
+                const hasActiveOrder = addressIdsWithActiveOrder.has(a.id);
+                return (
+                  <View key={a.id} style={styles.addressCardRow}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <Text style={styles.addressLabel}>{a.label || 'Address'}</Text>
+                        {a.isDefault ? (
+                          <View style={styles.defaultAddressTag}>
+                            <Text style={styles.defaultAddressTagText}>Default</Text>
+                          </View>
+                        ) : null}
+                        {hasActiveOrder ? (
+                          <View style={[styles.defaultAddressTag, { backgroundColor: '#f59e0b' }]}>
+                            <Text style={styles.defaultAddressTagText}>Active order</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text style={styles.addressLine}>{a.addressLine}</Text>
+                      <Text style={styles.addressPincode}>Pincode: {a.pincode}</Text>
+                      {hasActiveOrder ? (
+                        <Text style={[styles.muted, { marginTop: 4, fontSize: 12 }]}>Edit and delete are disabled until orders at this address are completed or cancelled.</Text>
+                      ) : null}
+                    </View>
+                    {!hasActiveOrder && (
+                      <>
+                        <TouchableOpacity
+                          style={styles.editAddressButton}
+                          onPress={() => {
+                            setError(null);
+                            setEditingAddressId(a.id);
+                            setAddAddressLabel(a.label || '');
+                            setAddAddressLine(a.addressLine || '');
+                            const prefill = prefillAddressFields(a);
+                            setAddHouseNo(prefill.houseNo);
+                            setAddStreetArea(prefill.streetArea);
+                            setAddCity(prefill.city);
+                            setAddPincode(a.pincode || '');
+                            setAddGoogleUrl(a.googleMapUrl || '');
+                            setAddIsDefault(a.isDefault ?? false);
+                            setServiceability({ serviceable: true });
+                            setReturnToBookPickupAddress(false);
+                            setHomeScreen('addAddress');
+                          }}
+                        >
+                          <MaterialIcons name="edit" size={20} color={colors.primary} />
+                          <Text style={styles.editAddressButtonText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.deleteAddressButton}
+                          onPress={() => handleDeleteAddress(a.id)}
+                        >
+                          <MaterialIcons name="delete-outline" size={20} color={colors.error} />
+                          <Text style={styles.deleteAddressButtonText}>Delete</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                );
+              })
+            )}
+            <TouchableOpacity
+              style={[styles.button, styles.buttonSecondary, { marginTop: 16 }]}
+              onPress={() => {
+                setError(null);
+                setEditingAddressId(null);
+                setAddAddressLabel('');
+                setAddAddressLine('');
+                setAddHouseNo('');
+                setAddStreetArea('');
+                setAddCity('');
+                setAddPincode('');
+                setAddGoogleUrl('');
+                setServiceability(null);
+                setReturnToBookPickupAddress(false);
+                setHomeScreen('addAddress');
+              }}
+            >
+              <Text style={styles.buttonSecondaryText}>+ Add address</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.textButton} onPress={() => setHomeScreen('home')}>
+              <Text style={styles.textButtonText}>Back to Home</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      );
+    } else if (homeScreen === 'addAddress') {
+      const isEditing = !!editingAddressId;
+      content = (
+        <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+          <View style={styles.card}>
+            <Text style={styles.title}>{isEditing ? 'Edit address' : 'Add address'}</Text>
+            <Text style={styles.subtitle}>Add address details and check if we serve your area.</Text>
+            {error && <Text style={styles.error}>{error}</Text>}
+            <TextInput
+              style={styles.input}
+              placeholder="Label (e.g. Home, Office)"
+              value={addAddressLabel}
+              onChangeText={setAddAddressLabel}
+            />
+            <Text style={[styles.subtitle, { marginTop: 12, marginBottom: 8 }]}>Search location on Google Maps</Text>
+            <TouchableOpacity
+              style={styles.googleMapsOpenRow}
+              onPress={() => {
+                setLastGoogleMapsUrl(addGoogleUrl || 'https://www.google.com/maps');
+                setShowGoogleMapsPicker(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="map" size={24} color={colors.primary} />
+              <Text style={styles.googleMapsOpenText}>Open Google Maps to search</Text>
+              <MaterialIcons name="open-in-new" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+            {addGoogleUrl ? (
+              <Text style={[styles.muted, { marginTop: 4 }]} numberOfLines={1}>Link: {addGoogleUrl}</Text>
+            ) : null}
+            <Text style={[styles.subtitle, { marginTop: 16, marginBottom: 8 }]}>Address details</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="House / Flat no."
+              value={addHouseNo}
+              onChangeText={setAddHouseNo}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Street & area"
+              value={addStreetArea}
+              onChangeText={setAddStreetArea}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="City"
+              value={addCity}
+              onChangeText={setAddCity}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Full address (optional; auto-filled from map)"
+              value={addAddressLine}
+              onChangeText={setAddAddressLine}
+              multiline
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Pincode (6 digits)"
+              value={addPincode}
+              onChangeText={(t) => setAddPincode(t.replace(/\D/g, '').slice(0, 6))}
+              keyboardType="number-pad"
+              maxLength={6}
+            />
+            <TouchableOpacity
+              style={[styles.buttonSecondary, checkingServiceability && styles.buttonDisabled]}
+              onPress={checkPincodeServiceability}
+              disabled={checkingServiceability || addPincode.trim().replace(/\D/g, '').length !== 6}
+            >
+              <Text style={styles.buttonSecondaryText}>
+                {checkingServiceability ? 'Checking…' : 'Check if we serve this area'}
+              </Text>
+            </TouchableOpacity>
+            {serviceability !== null && (
+              <View style={[styles.serviceabilityBox, !serviceability.serviceable && styles.serviceabilityBoxNotServiceable]}>
+                {serviceability.serviceable ? (
+                  <Text style={styles.serviceableText}>We serve this area. You can save the address.</Text>
+                ) : (
+                  <>
+                    <Text style={styles.notServiceableText}>
+                      Sorry, we're not serving your area yet.
+                    </Text>
+                    <Text style={styles.notServiceableSubtext}>
+                      You can request us to add your pincode. We'll notify admin.
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.button, styles.areaRequestButton, loading && styles.buttonDisabled]}
+                      onPress={handleAreaRequest}
+                      disabled={loading}
+                    >
+                      <Text style={styles.buttonText}>Request to serve my area</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            )}
+            <TextInput
+              style={[styles.input, { marginTop: 8 }]}
+              placeholder="Google Maps link (optional)"
+              value={addGoogleUrl}
+              onChangeText={setAddGoogleUrl}
+              autoCapitalize="none"
+            />
+            <TouchableOpacity
+              style={styles.checkRow}
+              onPress={() => setAddIsDefault(!addIsDefault)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.checkbox}>{addIsDefault ? '☑' : '☐'}</Text>
+              <Text style={styles.checkLabel}>Set as default address</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleSaveAddress}
+              disabled={loading}
+            >
+              <Text style={styles.buttonText}>{loading ? 'Saving…' : isEditing ? 'Update address' : 'Save address'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.textButton}
+              onPress={() => {
+                setEditingAddressId(null);
+                if (returnToBookPickupAddress) {
+                  setReturnToBookPickupAddress(false);
+                  setHomeScreen('bookPickup');
+                  setBookingStep('address');
+                } else {
+                  setHomeScreen('addresses');
+                }
+              }}
+            >
+              <Text style={styles.textButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      );
+    } else if (homeScreen === 'areaRequestSent') {
+      content = (
+        <View style={styles.card}>
+          <Text style={styles.title}>Request received</Text>
+          <Text style={styles.subtitle}>
+            We've sent your pincode and address to our team. We'll get in touch when we start serving your area.
+          </Text>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => {
+              setAreaRequestSent(false);
+              setHomeScreen('addresses');
+            }}
+          >
+            <Text style={styles.buttonText}>Back to Addresses</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    } else if (homeScreen === 'bookPickup') {
+      if (bookingSuccessOrderId) {
+        content = (
+          <View style={styles.card}>
+            <Text style={styles.title}>Booking confirmed</Text>
+            <Text style={styles.subtitle}>Your pickup has been scheduled. Order ID: {bookingSuccessOrderId}</Text>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => {
+                setBookingSuccessOrderId(null);
+                setHomeScreen('myOrders');
+                fetchOrders();
+              }}
+            >
+              <Text style={styles.buttonText}>View in Orders</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.textButton} onPress={() => { setBookingSuccessOrderId(null); setHomeScreen('home'); }}>
+              <Text style={styles.textButtonText}>Back to Home</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      } else if (bookingStep === 'services') {
+        content = (
+          <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+            <View style={styles.card}>
+              <Text style={styles.title}>Select services</Text>
+              <Text style={styles.subtitle}>Select at least one service. You can choose multiple.</Text>
+              {error && <Text style={styles.error}>{error}</Text>}
+              <View style={styles.tileGrid}>
+                {SERVICE_TYPES.map((s) => {
+                  const selected = selectedServiceIds.includes(s.id);
+                  return (
+                    <TouchableOpacity
+                      key={s.id}
+                      style={[styles.serviceTile, selected && styles.serviceTileSelected]}
+                      onPress={() => toggleService(s.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.serviceIcon}>{s.icon}</Text>
+                      <Text style={[styles.serviceLabel, selected && styles.serviceLabelSelected]}>
+                        {s.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {selectedServiceIds.length > 0 && (
+                <Text style={styles.muted}>Selected: {selectedServiceIds.length} service(s)</Text>
+              )}
+              <TouchableOpacity
+                style={[styles.button, selectedServiceIds.length === 0 && styles.buttonDisabled]}
+                onPress={() => {
+                  setError(null);
+                  if (selectedServiceIds.length === 0) {
+                    setError('Please select at least one service.');
+                    return;
+                  }
+                  setBookingStep('address');
+                }}
+                disabled={selectedServiceIds.length === 0}
+              >
+                <Text style={styles.buttonText}>Continue → Address</Text>
+              </TouchableOpacity>
+
+              {(meData?.activeSubscriptions?.length ?? 0) > 0 ? (
+                <View style={{ marginTop: 24 }}>
+                  <Text style={[styles.subtitle, { fontWeight: '600', marginBottom: 6 }]}>Active plans</Text>
+                  <Text style={[styles.muted, { marginBottom: 12 }]}>
+                    Tap a plan to book a slot (address is locked for the subscription).
+                  </Text>
+                  {(meData?.activeSubscriptions ?? []).map((sub) => {
+                    const subAddressId = (sub as ActiveSubscriptionItem).addressId ?? null;
+                    const addressLabel = subAddressId
+                      ? (savedAddresses.find((a) => a.id === subAddressId)?.label || 'Address')
+                      : 'Address';
+                    return (
+                    <TouchableOpacity
+                      key={sub.id}
+                      style={[styles.activePlanTile, { marginBottom: 12 }]}
+                      onPress={() => {
+                        setError(null);
+                        bookingFromSubscriptionRef.current = true;
+                        setBookingSubscriptionId(sub.id);
+                        setBookingSubscriptionValidFrom(sub.validityStartDate?.slice(0, 10) ?? null);
+                        setBookingSubscriptionValidTill(sub.validTill?.slice(0, 10) ?? null);
+                        setBookingAddressId(subAddressId);
+                        setBookingAddress(null);
+                        setBookingStep('date');
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <Text style={styles.activePlanTileTitle}>{sub.planName ?? 'Plan'}</Text>
+                        <View style={[styles.defaultAddressTag, { backgroundColor: colors.primaryLight }]}>
+                          <Text style={styles.defaultAddressTagText}>{addressLabel}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.activePlanTileSubtext}>
+                        {sub.remainingPickups}/{sub.maxPickups} pickups left
+                        {sub.validTill ? ` · Valid till ${sub.validTill.slice(0, 10)}` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                  })}
+                </View>
+              ) : null}
+
+              <TouchableOpacity style={styles.textButton} onPress={() => { setError(null); setHomeScreen('home'); }}>
+                <Text style={styles.textButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        );
+      } else if (bookingStep === 'address') {
+        const isSubscriptionBooking = !!bookingSubscriptionId || bookingFromSubscriptionRef.current;
+        const subscriptionAddressLocked = isSubscriptionBooking && !!bookingAddressId;
+        content = (
+          <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+            <View style={styles.card}>
+              <Text style={styles.title}>{isSubscriptionBooking ? 'Subscription pickup address' : 'Select address'}</Text>
+              <Text style={styles.subtitle}>
+                {subscriptionAddressLocked
+                  ? 'This subscription is tied to the address below. Tap "Next" to choose date & time.'
+                  : isSubscriptionBooking
+                    ? 'Tap "Next" below to choose date & time.'
+                    : 'Choose a saved address for pickup, or add one.'}
+              </Text>
+              {error && <Text style={styles.error}>{error}</Text>}
+              {subscriptionAddressLocked && bookingAddressId && !savedAddresses.find((a) => a.id === bookingAddressId) ? (
+                <View style={[styles.addressCard, { marginBottom: 12 }]}>
+                  <Text style={styles.muted}>This subscription is tied to an address that is no longer in your list. Pickup and bills will still be for that address. Tap Continue to select date & time.</Text>
+                  <TouchableOpacity style={[styles.button, { marginTop: 12 }]} onPress={() => { setError(null); setBookingStep('date'); }}>
+                    <Text style={styles.buttonText}>Continue → Date</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : savedAddresses.length === 0 ? (
+                <Text style={styles.muted}>No addresses yet. Add one below to continue.</Text>
+              ) : (
+                savedAddresses
+                  .filter((a) => !subscriptionAddressLocked || a.id === bookingAddressId)
+                  .map((a) => (
+                  <View key={a.id} style={styles.addressCardRow}>
+                    <TouchableOpacity
+                      style={{ flex: 1 }}
+                      onPress={() => {
+                        if (subscriptionAddressLocked && a.id === bookingAddressId) {
+                          setError(null);
+                          setBookingStep('date');
+                        } else if (!subscriptionAddressLocked) {
+                          handleBookingAddressSelect(a);
+                        }
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <Text style={styles.addressLabel}>{a.label || 'Address'}</Text>
+                        {a.isDefault ? (
+                          <View style={styles.defaultAddressTag}>
+                            <Text style={styles.defaultAddressTagText}>Default</Text>
+                          </View>
+                        ) : null}
+                        {subscriptionAddressLocked && a.id === bookingAddressId ? (
+                          <View style={styles.defaultAddressTag}>
+                            <Text style={styles.defaultAddressTagText}>Subscription address</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text style={styles.addressLine}>{a.addressLine}</Text>
+                      <Text style={styles.addressPincode}>Pincode: {a.pincode}</Text>
+                    </TouchableOpacity>
+                    {!subscriptionAddressLocked && (
+                      <>
+                        <TouchableOpacity
+                          style={styles.editAddressButton}
+                          onPress={() => {
+                            setEditingAddressId(a.id);
+                            setAddAddressLabel(a.label || '');
+                            setAddAddressLine(a.addressLine || '');
+                            const prefill = prefillAddressFields(a);
+                            setAddHouseNo(prefill.houseNo);
+                            setAddStreetArea(prefill.streetArea);
+                            setAddCity(prefill.city);
+                            setAddPincode(a.pincode || '');
+                            setAddGoogleUrl(a.googleMapUrl || '');
+                            setAddIsDefault(a.isDefault ?? false);
+                            setServiceability({ serviceable: true });
+                            setReturnToBookPickupAddress(true);
+                            setHomeScreen('addAddress');
+                          }}
+                        >
+                          <MaterialIcons name="edit" size={20} color={colors.primary} />
+                          <Text style={styles.editAddressButtonText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.deleteAddressButton}
+                          onPress={() => handleDeleteAddress(a.id)}
+                        >
+                          <MaterialIcons name="delete-outline" size={20} color={colors.error} />
+                          <Text style={styles.deleteAddressButtonText}>Delete</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                ))
+              )}
+              {(isSubscriptionBooking || subscriptionAddressLocked) ? (
+                <TouchableOpacity
+                  style={[styles.button, styles.buttonPrimary, { marginTop: 16 }]}
+                  onPress={() => {
+                    setError(null);
+                    setBookingStep('date');
+                  }}
+                >
+                  <Text style={styles.buttonText}>Next: Select date & time</Text>
+                </TouchableOpacity>
+              ) : null}
+              {!(isSubscriptionBooking || subscriptionAddressLocked) ? (
+                <TouchableOpacity
+                  style={[styles.buttonSecondary, { marginTop: savedAddresses.length > 0 ? 12 : 8 }]}
+                  onPress={() => {
+                    setError(null);
+                    setEditingAddressId(null);
+                    setAddAddressLabel('');
+                    setAddAddressLine('');
+                    setAddHouseNo('');
+                    setAddStreetArea('');
+                    setAddCity('');
+                    setAddPincode('');
+                    setAddGoogleUrl('');
+                    setServiceability(null);
+                    setReturnToBookPickupAddress(true);
+                    setHomeScreen('addAddress');
+                  }}
+                >
+                  <Text style={styles.buttonSecondaryText}>+ Add address</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={styles.textButton}
+                onPress={() => {
+                  setError(null);
+                  if (bookingSubscriptionId) {
+                    bookingFromSubscriptionRef.current = false;
+                    setHomeScreen('subscriptions');
+                    setBookingSubscriptionId(null);
+                    setBookingSubscriptionValidFrom(null);
+                    setBookingSubscriptionValidTill(null);
+                    setBookingAddressId(null);
+                    setBookingAddress(null);
+                  } else {
+                    setBookingStep('services');
+                  }
+                }}
+              >
+                <Text style={styles.textButtonText}>Back</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        );
+      } else if (bookingStep === 'date') {
+        const today = new Date();
+        const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        let minDate = todayDateOnly;
+        let maxDate: Date | undefined;
+        if (bookingSubscriptionId && (bookingSubscriptionValidFrom || bookingSubscriptionValidTill)) {
+          if (bookingSubscriptionValidFrom) {
+            const validFromDate = new Date(bookingSubscriptionValidFrom + 'T12:00:00');
+            if (validFromDate > minDate) minDate = validFromDate;
+          }
+          if (bookingSubscriptionValidTill) {
+            maxDate = new Date(bookingSubscriptionValidTill + 'T23:59:59');
+          }
+        }
+        const pickerValue = bookingDate
+          ? new Date(bookingDate + 'T12:00:00')
+          : minDate;
+        content = (
+          <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+            <View style={styles.card}>
+              <Text style={styles.title}>Select date</Text>
+              <Text style={styles.subtitle}>
+                {bookingSubscriptionId && (bookingSubscriptionValidFrom || bookingSubscriptionValidTill)
+                  ? 'Pick a date within your subscription validity.'
+                  : 'Pick a date for pickup (we\'ll show available time slots).'}
+              </Text>
+              {bookingSubscriptionId && (bookingSubscriptionValidFrom || bookingSubscriptionValidTill) ? (
+                <Text style={[styles.muted, { marginTop: 4 }]}>
+                  Valid from {bookingSubscriptionValidFrom ? new Date(bookingSubscriptionValidFrom + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '–'}
+                  {' to '}
+                  {bookingSubscriptionValidTill ? new Date(bookingSubscriptionValidTill + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '–'}
+                </Text>
+              ) : null}
+              {error && <Text style={styles.error}>{error}</Text>}
+              <TouchableOpacity
+                style={[styles.input, styles.datePickerButton]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={bookingDate ? styles.datePickerButtonText : styles.datePickerPlaceholder}>
+                  {bookingDate || 'Tap to choose date'}
+                </Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={pickerValue}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  minimumDate={minDate}
+                  maximumDate={maxDate}
+                  onChange={(event, selectedDate) => {
+                    if (Platform.OS === 'android') setShowDatePicker(false);
+                    if (event.type === 'set' && selectedDate) {
+                      setBookingDate(selectedDate.toISOString().slice(0, 10));
+                    }
+                  }}
+                />
+              )}
+              {Platform.OS === 'ios' && showDatePicker && (
+                <TouchableOpacity style={styles.button} onPress={() => setShowDatePicker(false)}>
+                  <Text style={styles.buttonText}>Done</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.button, bookingDate.length < 10 && styles.buttonDisabled]}
+                onPress={() => bookingDate.length >= 10 && handleBookingDateSelect(bookingDate)}
+                disabled={bookingDate.length < 10 || slotAvailabilityLoading}
+              >
+                <Text style={styles.buttonText}>{slotAvailabilityLoading ? 'Checking…' : 'Next: Choose time'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.textButton} onPress={() => { setBookingStep('address'); setBookingDate(''); setSlotAvailability(null); setShowDatePicker(false); }}>
+                <Text style={styles.textButtonText}>Back</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        );
+      } else if (bookingStep === 'time') {
+        content = (
+          <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+            <View style={styles.card}>
+              <Text style={styles.title}>Select time slot</Text>
+              {slotAvailability?.isHoliday ? (
+                <>
+                  <Text style={styles.notServiceableText}>We're closed on this date (holiday). Please choose another day.</Text>
+                  <TouchableOpacity style={styles.textButton} onPress={() => { setBookingStep('date'); setBookingDate(''); setSlotAvailability(null); }}>
+                    <Text style={styles.textButtonText}>Back to date</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.subtitle}>Available slots for {bookingDate}{slotAvailability?.branchName ? ` (${slotAvailability.branchName})` : ''}</Text>
+                  {(slotAvailability?.timeSlots ?? []).length === 0 ? (
+                    <Text style={styles.muted}>No slots available. Try another date.</Text>
+                  ) : (
+                    (slotAvailability?.timeSlots ?? []).map((slot) => (
+                      <TouchableOpacity
+                        key={slot}
+                        style={[styles.addressCard, { marginBottom: 8 }]}
+                        onPress={() => handleBookingTimeSelect(slot)}
+                      >
+                        <Text style={styles.addressLabel}>{slot}</Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                  <TouchableOpacity style={styles.textButton} onPress={() => { setBookingStep('date'); setSlotAvailability(null); }}>
+                    <Text style={styles.textButtonText}>Back to date</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </ScrollView>
+        );
+      } else if (bookingStep === 'confirm') {
+        const isSub = !!bookingSubscriptionId;
+        content = (
+          <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding, styles.confirmScrollContent]} showsVerticalScrollIndicator={false}>
+            <View style={styles.card}>
+              <Text style={styles.title}>Confirm booking</Text>
+              <Text style={styles.subtitle}>Address: {bookingAddress?.label} – {bookingAddress?.addressLine}, {bookingAddress?.pincode}</Text>
+              <Text style={styles.subtitle}>Date: {bookingDate} · Time: {bookingTimeSlot}</Text>
+              <Text style={styles.subtitle}>{isSub ? 'Booking with subscription' : `Services: ${selectedServiceIds.map((id) => SERVICE_TYPES.find((s) => s.id === id)?.label ?? id).join(', ')}`}</Text>
+              {error && <Text style={styles.error}>{error}</Text>}
+              <TouchableOpacity style={styles.textButton} onPress={() => setBookingStep('time')}>
+                <Text style={styles.textButtonText}>Back</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.floatingSubmitWrapper}>
+              <TouchableOpacity
+                style={[styles.floatingSubmitButton, loading && styles.buttonDisabled]}
+                onPress={handleConfirmBooking}
+                disabled={loading}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.floatingSubmitText}>{loading ? 'Booking…' : 'Submit'}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        );
+      } else {
+        content = null;
+      }
+    } else if (homeScreen === 'subscriptions') {
+      const selectedPlansAddress = plansAddressId ? savedAddresses.find((a) => a.id === plansAddressId) : null;
+      content = (
+        <ScrollView ref={plansScrollViewRef} style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+          <View style={styles.plansPageWrapper}>
+            <Text style={styles.title}>Plans</Text>
+            <Text style={[styles.subtitle, styles.plansSubtitleOneLine]} numberOfLines={1}>Select an address to see plans for your area.</Text>
+            {purchaseSuccess && <Text style={styles.orderAmountPaid}>{purchaseSuccess}</Text>}
+            {(purchaseError || error) && <Text style={styles.error}>{purchaseError || error}</Text>}
+
+            {/* Address chips: labels only, select one (no "Address" title to save space) */}
+            {savedAddresses.length > 0 ? (
+              <View style={[styles.plansAddressSection, highlightPlansAddressSection && styles.plansAddressSectionHighlight]}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
+                  {savedAddresses.map((a) => (
+                    <TouchableOpacity
+                      key={a.id}
+                      onPress={() => { setPlansAddressId(a.id); setHighlightPlansAddressSection(false); }}
+                      style={[
+                        styles.orderFilterChip,
+                        plansAddressId === a.id && styles.orderFilterChipActive,
+                        { marginRight: 0 },
+                      ]}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.orderFilterChipText, plansAddressId === a.id && styles.orderFilterChipTextActive]} numberOfLines={1}>
+                        {a.label || 'Address'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : (
+              <View style={{ marginBottom: 12 }}>
+                <Text style={[styles.muted, { marginBottom: 8 }]}>
+                  You don't have any addresses yet. Add one to see plans for your area.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.buttonSecondary, { marginRight: 0 }]}
+                  onPress={() => {
+                    setError(null);
+                    setHomeScreen('addresses');
+                    fetchAddresses();
+                  }}
+                >
+                  <Text style={styles.buttonSecondaryText}>+ Add address</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Available plans header row: title + pincode-branch on the right (one line) */}
+            <View style={styles.availablePlansHeaderRow}>
+              <Text style={[styles.subtitle, styles.availablePlansTitle]} numberOfLines={1}>
+                Available plans
+              </Text>
+              {selectedPlansAddress && (
+                plansBranchLoading ? (
+                  <Text style={[styles.muted, { flexShrink: 0 }]}>Checking…</Text>
+                ) : plansBranchInfo ? (
+                  <Text style={styles.availablePlansBranchTag} numberOfLines={1}>
+                    {selectedPlansAddress.pincode} - {plansBranchInfo.branchName}
+                  </Text>
+                ) : (
+                  <Text style={styles.availablePlansBranchTag} numberOfLines={1}>
+                    {selectedPlansAddress.pincode} - Not serviceable
+                  </Text>
+                )
+              )}
+            </View>
+            {savedAddresses.length === 0 ? (
+              <Text style={[styles.muted, { marginBottom: 16 }]}>Add an address in Profile → My addresses to see and purchase plans.</Text>
+            ) : plansLoading ? (
+              <Text style={[styles.muted, { marginBottom: 16 }]}>Loading…</Text>
+            ) : plansForSelectedBranch.length === 0 ? (
+              <Text style={[styles.muted, { marginBottom: 16 }]}>No plans available for this area.</Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.availablePlansScroll}
+                contentContainerStyle={styles.availablePlansScrollContent}
+              >
+                {plansForSelectedBranch.map((plan) => {
+                  const isPurchased = !plan.isRedeemable && plan.reason === 'ALREADY_REDEEMED';
+                  const isFree = plan.pricePaise === 0;
+                  const variant = (plan.variant || '').toUpperCase();
+                  const planGradientColors: [string, string] = isFree
+                    ? ['#15803d', '#166534']
+                    : variant === 'COUPLE'
+                      ? ['#1d4ed8', '#1e40af']
+                      : variant === 'FAMILY'
+                        ? ['#c2410c', '#9a3412']
+                        : ['#ca8a04', '#a16207'];
+                  const tileContent = (
+                    <>
+                      <Text
+                        style={isPurchased ? styles.addressLabel : styles.availablePlanTileTitleLight}
+                        numberOfLines={1}
+                      >
+                        {plan.name}
+                      </Text>
+                      {plan.description?.trim() ? (
+                        <Text
+                          style={isPurchased ? styles.addressLine : styles.availablePlanTileDescLight}
+                          numberOfLines={3}
+                        >
+                          {plan.description}
+                        </Text>
+                      ) : null}
+                      <Text style={isPurchased ? styles.muted : styles.availablePlanTileMetaLight}>
+                        ₹{(plan.pricePaise / 100).toFixed(2)} · {plan.validityDays} days · {plan.maxPickups} pickups
+                        {plan.kgLimit != null ? ` · ${plan.kgLimit} kg` : ''}
+                      </Text>
+                      {isPurchased ? (
+                        <Text style={[styles.muted, { marginTop: 6 }]}>Purchase will be available when this plan is inactive.</Text>
+                      ) : null}
+                      <TouchableOpacity
+                        style={[
+                          styles.buttonSecondary,
+                          { marginTop: 8 },
+                          (purchaseLoading || !plan.isRedeemable) && styles.buttonDisabled,
+                        ]}
+                        onPress={() => {
+                          if (!token || !plan.isRedeemable) return;
+                          const addressId = plansAddressId || subscriptionPurchaseAddressId;
+                          if (!addressId) {
+                            setPurchaseError('Please select an address at the top.');
+                            return;
+                          }
+                          const addressLabel = selectedPlansAddress?.label || 'selected address';
+                          setPurchaseConfirm({ planId: plan.id, planName: plan.name, addressId, addressLabel });
+                        }}
+                        disabled={purchaseLoading || !plan.isRedeemable}
+                      >
+                        <Text style={styles.buttonSecondaryText}>
+                          {purchaseLoading
+                            ? 'Processing…'
+                            : plan.isRedeemable
+                              ? isFree
+                                ? 'Free'
+                                : 'Purchase'
+                              : plan.reason === 'ALREADY_REDEEMED'
+                                ? 'Active'
+                                : 'Purchase'}
+                        </Text>
+                      </TouchableOpacity>
+                    </>
+                  );
+                  return (
+                    <View key={plan.id} style={styles.availablePlanTile}>
+                      {isPurchased ? (
+                        <View style={[styles.availablePlanTileInner, styles.availablePlanTilePurchased]}>
+                          {tileContent}
+                        </View>
+                      ) : (
+                        <LinearGradient
+                          colors={planGradientColors}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.availablePlanTileInner}
+                        >
+                          {tileContent}
+                        </LinearGradient>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* Secondary toggle: Active plan | Completed */}
+            <View style={styles.plansTabToggle}>
+              <TouchableOpacity
+                style={[styles.plansTabToggleSegment, subscriptionPlansTab === 'active' && styles.plansTabToggleSegmentActive]}
+                onPress={() => setSubscriptionPlansTab('active')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.plansTabToggleText, subscriptionPlansTab === 'active' && styles.plansTabToggleTextActive]}>Active plan</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.plansTabToggleSegment, subscriptionPlansTab === 'completed' && styles.plansTabToggleSegmentActive]}
+                onPress={() => setSubscriptionPlansTab('completed')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.plansTabToggleText, subscriptionPlansTab === 'completed' && styles.plansTabToggleTextActive]}>Completed</Text>
+              </TouchableOpacity>
+            </View>
+
+            {subscriptionPlansTab === 'active' ? (
+              (meData?.activeSubscriptions?.length ?? 0) === 0 ? (
+                <Text style={styles.muted}>No active plan. Purchase one above.</Text>
+              ) : (
+                (meData?.activeSubscriptions ?? []).map((sub) => {
+                  const canBook = sub.remainingPickups > 0 && !sub.hasActiveOrder && new Date(sub.validTill) >= new Date();
+                  const desc = sub.planDescription?.trim() || `Valid till ${sub.validTill.slice(0, 10)} · Pickups: ${sub.remainingPickups}/${sub.maxPickups}${sub.kgLimit != null ? ` · ${sub.kgLimit} kg` : ''}${sub.itemsLimit != null ? ` · ${sub.itemsLimit} items` : ''}`;
+                  return (
+                    <TouchableOpacity
+                      key={sub.id}
+                      style={[styles.addressCard, { marginBottom: 10 }]}
+                      onPress={() => { setSelectedSubscriptionId(sub.id); setHomeScreen('subscriptionDetail'); }}
+                      activeOpacity={0.9}
+                    >
+                      <View>
+                        <Text style={styles.addressLabel}>{sub.planName}</Text>
+                        <Text style={styles.addressLine}>{desc}</Text>
+                        <Text style={styles.muted}>Left: {sub.remainingPickups} pickups{sub.remainingKg != null ? ` · ${sub.remainingKg} kg` : ''}{sub.remainingItems != null ? ` · ${sub.remainingItems} items` : ''} · Valid till {sub.validTill.slice(0, 10)}</Text>
+                        {canBook ? (
+                          <TouchableOpacity
+                            style={[styles.button, { marginTop: 8 }]}
+                            onPress={(e) => { e?.stopPropagation?.();
+                            setError(null);
+                            bookingFromSubscriptionRef.current = true;
+                            setBookingSubscriptionId(sub.id);
+                            setBookingSubscriptionValidFrom(sub.validityStartDate?.slice(0, 10) ?? null);
+                            setBookingSubscriptionValidTill(sub.validTill?.slice(0, 10) ?? null);
+                            setBookingStep('address');
+                            setSelectedServiceIds([]);
+                            const subAddressId = (sub as ActiveSubscriptionItem).addressId ?? null;
+                            if (subAddressId) {
+                              const addr = savedAddresses.find((a) => a.id === subAddressId);
+                              setBookingAddressId(subAddressId);
+                              setBookingAddress(addr ?? null);
+                            } else {
+                              setBookingAddressId(null);
+                              setBookingAddress(null);
+                            }
+                            setBookingDate('');
+                            setBookingTimeSlot('');
+                            setSlotAvailability(null);
+                            setHomeScreen('bookPickup');
+                            }}
+                          >
+                            <Text style={styles.buttonText}>Book pickup</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <Text style={styles.muted}>{sub.hasActiveOrder ? 'You have an ongoing order with this plan.' : sub.remainingPickups === 0 ? 'No pickups left.' : 'Plan expired.'}</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )
+            ) : (meData?.pastSubscriptions?.length ?? 0) === 0 ? (
+              <Text style={styles.muted}>No completed plans yet.</Text>
+            ) : (
+              (meData?.pastSubscriptions ?? []).map((sub) => {
+                const desc = `From ${sub.validityStartDate.slice(0, 10)} to ${sub.validTill.slice(0, 10)} · Used pickups: ${sub.usedPickups}/${sub.maxPickups}${sub.kgLimit != null ? ` · ${sub.usedKg}/${sub.kgLimit} kg` : ''}${
+                  sub.itemsLimit != null ? ` · ${sub.usedItemsCount}/${sub.itemsLimit} items` : ''
+                }`;
+                return (
+                  <TouchableOpacity
+                    key={sub.id}
+                    style={[styles.addressCard, { marginBottom: 10 }]}
+                    onPress={() => { setSelectedSubscriptionId(sub.id); setHomeScreen('subscriptionDetail'); }}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={styles.addressLabel}>{sub.planName}</Text>
+                    <Text style={styles.addressLine}>{desc}</Text>
+                    <Text style={styles.muted}>Ended on {sub.inactivatedAt.slice(0, 10)}</Text>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+        </ScrollView>
+      );
+    } else if (homeScreen === 'subscriptionDetail') {
+      const apiOrigin = process.env.EXPO_PUBLIC_API_URL ?? '';
+      content = (
+        <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+          <View style={styles.card}>
+            <TouchableOpacity style={styles.textButton} onPress={() => { setHomeScreen('subscriptions'); setSelectedSubscriptionId(null); setSubscriptionDetail(null); }}>
+              <Text style={styles.textButtonText}>← Back to Plans</Text>
+            </TouchableOpacity>
+            {subscriptionDetailLoading ? (
+              <Text style={styles.muted}>Loading…</Text>
+            ) : subscriptionDetail ? (
+              <>
+                <Text style={styles.title}>{subscriptionDetail.planName ?? 'Plan'}</Text>
+                <View style={[styles.defaultAddressTag, { alignSelf: 'flex-start', marginVertical: 8, backgroundColor: subscriptionDetail.active ? colors.primary : '#6b7280' }]}>
+                  <Text style={styles.defaultAddressTagText}>{subscriptionDetail.active ? 'Active' : 'Inactive'}</Text>
+                </View>
+                <Text style={styles.subtitle}>
+                  {subscriptionDetail.remainingPickups}/{subscriptionDetail.maxPickups} pickups left
+                  {subscriptionDetail.remainingKg != null ? ` · ${subscriptionDetail.remainingKg} kg left` : ''}
+                  {subscriptionDetail.remainingItems != null ? ` · ${subscriptionDetail.remainingItems} items left` : ''}
+                </Text>
+                <Text style={styles.muted}>Valid till {subscriptionDetail.validTill.slice(0, 10)}</Text>
+                <View style={{ marginTop: 16, marginBottom: 8 }}>
+                  <Text style={[styles.subtitle, { fontWeight: '600' }]}>Payment</Text>
+                  <Text style={subscriptionDetail.paymentStatus === 'PAID' ? styles.orderAmountPaid : styles.muted}>
+                    {subscriptionDetail.paymentStatus === 'PAID' ? 'Paid' : 'Not paid'}
+                  </Text>
+                  <Text style={[styles.muted, { fontSize: 12, marginTop: 4 }]}>
+                    {subscriptionDetail.paymentStatus === 'PAID' ? 'Admin has confirmed payment for this subscription.' : 'Payment will show as Paid once admin confirms it.'}
+                  </Text>
+                </View>
+                {subscriptionDetail.invoice ? (
+                  <>
+                    {subscriptionInvoiceError ? (
+                      <Text style={[styles.error, { marginTop: 8 }]}>{subscriptionInvoiceError}</Text>
+                    ) : null}
+                    <TouchableOpacity
+                      style={[styles.button, { marginTop: 8 }]}
+                      onPress={async () => {
+                        if (!token) return;
+                        try {
+                          setSubscriptionInvoiceError(null);
+                          setSubscriptionInvoiceLoading(true);
+                          const base64 = await fetchInvoicePdfBase64(subscriptionDetail.invoice!.id, token);
+                          const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+                          const fileUri = `${dir}subscription-invoice-${subscriptionDetail.invoice!.id}-${Date.now()}.pdf`;
+                          await FileSystem.writeAsStringAsync(fileUri, base64, {
+                            encoding: FileSystem.EncodingType.Base64,
+                          });
+                          setSubscriptionInvoicePreviewUri(fileUri);
+                        } catch (e) {
+                          setSubscriptionInvoiceError((e as Error).message);
+                        } finally {
+                          setSubscriptionInvoiceLoading(false);
+                        }
+                      }}
+                      disabled={subscriptionInvoiceLoading}
+                    >
+                      {subscriptionInvoiceLoading ? (
+                        <ActivityIndicator size="small" color={colors.white} />
+                      ) : (
+                        <Text style={styles.buttonText}>Preview invoice</Text>
+                      )}
+                    </TouchableOpacity>
+                    {subscriptionInvoicePreviewUri ? (
+                      <View style={{ marginTop: 16 }}>
+                        <Text style={[styles.subtitle, { fontWeight: '600', marginBottom: 8 }]}>Invoice preview</Text>
+                        <View style={styles.invoicePreviewContainer}>
+                          <WebView
+                            source={{ uri: subscriptionInvoicePreviewUri }}
+                            style={styles.invoicePreviewWebView}
+                          />
+                        </View>
+                        <View style={styles.invoiceActions}>
+                          <TouchableOpacity
+                            style={[styles.invoiceCta, styles.invoiceCtaDownload]}
+                            onPress={() => Linking.openURL(subscriptionInvoicePreviewUri)}
+                          >
+                            <Text style={styles.invoiceCtaText}>Download</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.invoiceCta, styles.invoiceCtaDownload]}
+                            onPress={async () => {
+                              try {
+                                const Print = await import('expo-print');
+                                await Print.printAsync({ uri: subscriptionInvoicePreviewUri });
+                              } catch (e) {
+                                setSubscriptionInvoiceError((e as Error).message);
+                              }
+                            }}
+                          >
+                            <Text style={styles.invoiceCtaText}>Print</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.invoiceCta, styles.invoiceCtaShare]}
+                            onPress={async () => {
+                              try {
+                                const available = await Sharing.isAvailableAsync();
+                                if (available) {
+                                  await Sharing.shareAsync(subscriptionInvoicePreviewUri, {
+                                    mimeType: 'application/pdf',
+                                    dialogTitle: 'Share subscription invoice',
+                                  });
+                                } else {
+                                  setSubscriptionInvoiceError('Sharing is not available on this device.');
+                                }
+                              } catch (e) {
+                                setSubscriptionInvoiceError((e as Error).message);
+                              }
+                            }}
+                          >
+                            <Text style={[styles.invoiceCtaText, { color: colors.white }]}>Share</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : null}
+                  </>
+                ) : (
+                  <Text style={styles.muted}>Invoice not available.</Text>
+                )}
+              </>
+            ) : (
+              <Text style={styles.muted}>Could not load plan details.</Text>
+            )}
+          </View>
+        </ScrollView>
+      );
+    } else if (homeScreen === 'myOrders') {
+      const ongoing = orders.filter((o) => {
+        const s = (o.status || '').toUpperCase();
+        return s !== 'DELIVERED' && s !== 'CANCELLED';
+      });
+      const completed = orders.filter((o) => {
+        const s = (o.status || '').toUpperCase();
+        return s === 'DELIVERED' || s === 'CANCELLED';
+      });
+      const sortedOrders = [...ongoing, ...completed];
+      function utilisationSummary(o: OrderSummary): string {
+        const typ = (o as OrderSummary & { orderType?: string }).orderType;
+        if (typ === 'SUBSCRIPTION' && (o.subscriptionUsageKg != null || o.subscriptionUsageItems != null)) {
+          const kg = o.subscriptionUsageKg != null ? `${o.subscriptionUsageKg} kg` : '';
+          const items = o.subscriptionUsageItems != null ? `${o.subscriptionUsageItems} items` : '';
+          return [kg, items].filter(Boolean).join(' · ') || 'Subscription';
+        }
+        return (o.serviceType || '').split(',').map((s) => serviceTypeDisplayLabel(s.trim())).filter(Boolean).join(', ') || '—';
+      }
+      content = (
+        <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+          <View style={styles.contentPageWrapper}>
+            <Text style={styles.title}>Orders</Text>
+            <Text style={styles.subtitle}>All orders (ongoing and completed) with status and utilisation.</Text>
+            {error && <Text style={styles.error}>{error}</Text>}
+            {ordersLoading ? (
+              <Text style={styles.muted}>Loading…</Text>
+            ) : sortedOrders.length === 0 ? (
+              <Text style={styles.muted}>No orders yet.</Text>
+            ) : (
+              sortedOrders.map((o) => {
+                const src = (o as OrderSummary & { orderSource?: string | null }).orderSource;
+                const typ = (o as OrderSummary & { orderType?: string }).orderType;
+                const typeLabel = src === 'WALK_IN' ? 'Walk-in' : typ === 'SUBSCRIPTION' ? 'Subscription' : 'Online';
+                return (
+                  <TouchableOpacity
+                    key={o.id}
+                    style={[styles.addressCard, styles.orderTileCard, { marginBottom: 8 }]}
+                    onPress={() => {
+                      setSelectedOrderId(o.id);
+                      setOrderDetail(null);
+                      setOrderInvoices([]);
+                      setHomeScreen('orderDetail');
+                    }}
+                  >
+                    <View style={styles.orderTileHeader}>
+                      <Text style={[styles.addressLabel, styles.orderTileOrderId]}>#{o.id}</Text>
+                      <View style={styles.orderTileTag}>
+                        <Text style={styles.orderTileTagText}>{typeLabel}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.addressLine}>{String(o.pickupDate).slice(0, 10)} {o.timeWindow}</Text>
+                    <Text style={[styles.addressLine, { marginTop: 2, fontSize: 13 }]}>
+                      Utilisation: {utilisationSummary(o)}
+                    </Text>
+                    {o.paymentStatus === 'CAPTURED' ? (
+                      <View style={styles.orderAmountPaidRow}>
+                        <View style={styles.paidTickCircle}>
+                          <MaterialIcons name="check" size={14} color={colors.white} />
+                        </View>
+                        <Text style={styles.orderAmountPaid}>
+                          Paid{o.amountToPayPaise != null && o.amountToPayPaise > 0 ? `: ₹${(o.amountToPayPaise / 100).toFixed(2)}` : ''}
+                        </Text>
+                      </View>
+                    ) : o.paymentStatus === 'FAILED' ? (
+                      <Text style={styles.error}>Payment failed</Text>
+                    ) : o.amountToPayPaise != null && o.amountToPayPaise > 0 ? (
+                      <Text style={styles.orderAmount}>Amount to pay: ₹{(o.amountToPayPaise / 100).toFixed(2)}</Text>
+                    ) : null}
+                    <View style={styles.orderTileStatusRow}>
+                      <Text style={[styles.orderTileStatusText, o.status === 'CANCELLED' && styles.orderTileStatusCancelled]}>
+                        {orderStatusLabel(o.status)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+        </ScrollView>
+      );
+    } else if (homeScreen === 'orderDetail' && selectedOrderId) {
+      content = (
+        <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+          <View style={styles.card}>
+            <Text style={styles.title}>Order #{selectedOrderId}</Text>
+            {error && <Text style={styles.error}>{error}</Text>}
+            {orderDetail ? (
+              <>
+                <View style={styles.orderDetailRow}>
+                  <Text style={styles.orderDetailLabel}>Status: </Text>
+                  <View style={styles.statusChip}>
+                    <Text style={styles.statusChipText}>{orderStatusLabel(orderDetail.status)}</Text>
+                  </View>
+                </View>
+                <View style={styles.orderDetailRow}>
+                  <Text style={styles.orderDetailLabel}>Pickup: </Text>
+                  <Text style={styles.orderDetailValue}>{String(orderDetail.pickupDate).slice(0, 10)} {orderDetail.timeWindow}</Text>
+                </View>
+                <View style={styles.orderDetailRow}>
+                  <Text style={styles.orderDetailLabel}>Services: </Text>
+                  <Text style={styles.orderDetailValue}>
+                    {(orderDetail.serviceTypes ?? (orderDetail.serviceType ? [orderDetail.serviceType] : [])).map(serviceTypeDisplayLabel).join(', ')}
+                  </Text>
+                </View>
+                {orderDetail.addressId && (() => {
+                  const addr = addresses.find((a) => a.id === orderDetail.addressId);
+                  if (addr) {
+                    return (
+                      <Text style={styles.subtitle}>Address: {addr.label} – {addr.addressLine}, {addr.pincode}</Text>
+                    );
+                  }
+                  if (orderDetail.pincode) {
+                    return (
+                      <Text style={styles.subtitle}>Address: Pincode {orderDetail.pincode}</Text>
+                    );
+                  }
+                  return null;
+                })()}
+                {(() => {
+                  const finalInv = orderInvoices.find((i) => i.type === 'FINAL');
+                  const isPaid = orderDetail.paymentStatus === 'CAPTURED';
+                  if (finalInv) {
+                    if (isPaid) {
+                      return (
+                        <LinearGradient
+                          colors={[colors.primary, colors.primaryDark]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.amountPaidBoxGradient}
+                        >
+                          <View style={styles.orderAmountPaidRow}>
+                            <View style={styles.paidTickCircleOnGreen}>
+                              <MaterialIcons name="check" size={14} color={colors.white} />
+                            </View>
+                            <Text style={styles.amountPaidLabelOnGradient}>Amount paid</Text>
+                          </View>
+                          <Text style={styles.amountPaidValueOnGradient}>₹{(finalInv.total / 100).toFixed(2)}</Text>
+                          <Text style={styles.amountPaidMutedOnGradient}>Payment recorded</Text>
+                        </LinearGradient>
+                      );
+                    }
+                    return (
+                      <View style={styles.amountToPayBox}>
+                        <Text style={styles.amountToPayLabel}>Amount to pay</Text>
+                        <Text style={styles.amountToPayValue}>₹{(finalInv.total / 100).toFixed(2)}</Text>
+                        <Text style={styles.muted}>Final invoice (includes any discount)</Text>
+                      </View>
+                    );
+                  }
+                  if (isPaid) {
+                    return (
+                      <LinearGradient
+                        colors={[colors.primary, colors.primaryDark]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.amountPaidBoxGradient}
+                      >
+                        <View style={styles.orderAmountPaidRow}>
+                          <View style={styles.paidTickCircleOnGreen}>
+                            <MaterialIcons name="check" size={14} color={colors.white} />
+                          </View>
+                          <Text style={styles.amountPaidLabelOnGradient}>Payment status</Text>
+                        </View>
+                        <Text style={styles.amountPaidValueOnGradient}>Paid</Text>
+                      </LinearGradient>
+                    );
+                  }
+                  return null;
+                })()}
+                <Text style={[styles.subtitle, { marginTop: 12 }]}>Invoices</Text>
+                {invoiceError ? (
+                  <Text style={[styles.error, { marginBottom: 8 }]}>{invoiceError}</Text>
+                ) : null}
+                {orderInvoices.length === 0 ? (
+                  <Text style={styles.muted}>No invoices yet.</Text>
+                ) : (
+                  orderInvoices.map((inv) => {
+                    const isLoading = invoiceLoadingId === inv.id;
+                    const items = inv.items ?? [];
+                    const discountPaise = inv.discountPaise ?? 0;
+                    const subtotal = inv.subtotal ?? inv.total;
+                    const tax = inv.tax ?? 0;
+                    const openInvoice = async () => {
+                      if (!token) return;
+                      setInvoiceError(null);
+                      setInvoiceLoadingId(inv.id);
+                      try {
+                        const base64 = await fetchInvoicePdfBase64(inv.id, token);
+                        const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+                        const fileUri = `${dir}invoice-${inv.id}-${Date.now()}.pdf`;
+                        await FileSystem.writeAsStringAsync(fileUri, base64, {
+                          encoding: FileSystem.EncodingType.Base64,
+                        });
+                        const available = await Sharing.isAvailableAsync();
+                        if (available) {
+                          await Sharing.shareAsync(fileUri, {
+                            mimeType: 'application/pdf',
+                            dialogTitle: 'View or save invoice',
+                          });
+                        } else {
+                          setInvoiceError('Sharing is not available on this device.');
+                        }
+                      } catch (e) {
+                        setInvoiceError((e as Error).message);
+                      } finally {
+                        setInvoiceLoadingId(null);
+                      }
+                    };
+                    return (
+                      <View key={inv.id} style={[styles.addressCard, styles.invoiceRow]}>
+                        <Text style={styles.invoiceTypeLabel}>{inv.type}</Text>
+                        {items.length > 0 ? (
+                          <>
+                            {items.map((item) => (
+                              <View key={item.id} style={styles.invoiceItemRow}>
+                                <Text style={styles.invoiceItemName} numberOfLines={2}>
+                                  {item.name}
+                                  {item.quantity !== 1 ? ` × ${item.quantity}` : ''}
+                                </Text>
+                                <Text style={styles.invoiceItemAmount}>₹{(item.amount / 100).toFixed(2)}</Text>
+                              </View>
+                            ))}
+                            <View style={styles.invoiceTotals}>
+                              <View style={styles.invoiceTotalRow}>
+                                <Text style={styles.invoiceTotalLabel}>Subtotal</Text>
+                                <Text style={styles.invoiceTotalValue}>₹{(subtotal / 100).toFixed(2)}</Text>
+                              </View>
+                              {tax > 0 && (
+                                <View style={styles.invoiceTotalRow}>
+                                  <Text style={styles.invoiceTotalLabel}>Tax</Text>
+                                  <Text style={styles.invoiceTotalValue}>₹{(tax / 100).toFixed(2)}</Text>
+                                </View>
+                              )}
+                              {discountPaise > 0 && (
+                                <View style={styles.invoiceTotalRow}>
+                                  <Text style={styles.invoiceTotalLabel}>Discount</Text>
+                                  <Text style={[styles.invoiceTotalValue, { color: colors.success }]}>- ₹{(discountPaise / 100).toFixed(2)}</Text>
+                                </View>
+                              )}
+                              <View style={[styles.invoiceTotalRow, styles.invoiceTotalRowFinal]}>
+                                <Text style={styles.invoiceTotalLabelFinal}>Total</Text>
+                                <Text style={styles.invoiceTotalValueFinal}>₹{(inv.total / 100).toFixed(2)}</Text>
+                              </View>
+                            </View>
+                          </>
+                        ) : (
+                          <Text style={styles.muted}>Total: ₹{(inv.total / 100).toFixed(2)}</Text>
+                        )}
+                        <View style={styles.invoiceActions}>
+                          <TouchableOpacity
+                            style={[styles.invoiceCta, styles.invoiceCtaDownload, isLoading && styles.buttonDisabled]}
+                            onPress={openInvoice}
+                            disabled={isLoading}
+                          >
+                            {isLoading ? (
+                              <ActivityIndicator size="small" color={colors.primary} />
+                            ) : (
+                              <Text style={styles.invoiceCtaText}>Download</Text>
+                            )}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.invoiceCta, styles.invoiceCtaShare, isLoading && styles.buttonDisabled]}
+                            onPress={openInvoice}
+                            disabled={isLoading}
+                          >
+                            <Text style={[styles.invoiceCtaText, { color: colors.white }]}>Share</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+              </>
+            ) : (
+              <Text style={styles.muted}>Loading…</Text>
+            )}
+            <TouchableOpacity style={styles.textButton} onPress={() => { setHomeScreen('myOrders'); setSelectedOrderId(null); setOrderDetail(null); setInvoiceError(null); fetchOrders(); }}>
+              <Text style={styles.textButtonText}>Back to Orders</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      );
+    } else if (homeScreen === 'profile') {
+      content = (
+        <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}>
+          <View style={styles.contentPageWrapper}>
+            <Text style={styles.title}>Profile</Text>
+            <Text style={styles.subtitle}>Edit your details. Mobile number cannot be changed.</Text>
+            {error && <Text style={styles.error}>{error}</Text>}
+            <Text style={styles.inputLabel}>Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Full name"
+              value={name}
+              onChangeText={setName}
+            />
+            <Text style={styles.inputLabel}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Email (optional)"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
+            />
+            <Text style={styles.inputLabel}>Mobile number (cannot be changed)</Text>
+            <TextInput
+              style={[styles.input, styles.inputReadOnly]}
+              value={userPhone || '—'}
+              editable={false}
+              placeholder="—"
+            />
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={async () => {
+                setError(null);
+                setLoading(true);
+                try {
+                  if (token) await updateMe(token, { name: name.trim() || undefined, email: email.trim() || undefined });
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Failed to save');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.buttonText}>{loading ? 'Saving…' : 'Save'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.buttonSecondary, { marginTop: 12 }]}
+              onPress={() => { setError(null); setHomeScreen('addresses'); fetchAddresses(); }}
+            >
+              <Text style={styles.buttonSecondaryText}>Edit my addresses</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.buttonSecondary, styles.profileLogoutButton, loading && styles.buttonDisabled]}
+              onPress={handleLogout}
+              disabled={loading}
+            >
+              <Text style={styles.profileLogoutText}>Log out</Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.inputLabel, { marginTop: 24, marginBottom: 8 }]}>Account settings</Text>
+            <View style={styles.profileAccountSettingsRow}>
+              <TouchableOpacity
+                style={styles.profileAccountSettingItem}
+                onPress={() => {
+                  if (welcomeBranding?.termsAndConditions?.trim()) {
+                    setLegalModalContent({ title: 'Terms and Conditions', body: welcomeBranding.termsAndConditions.trim() });
+                  }
+                }}
+                disabled={!welcomeBranding?.termsAndConditions?.trim()}
+              >
+                <MaterialIcons name="description" size={20} color={colors.primary} />
+                <Text style={[styles.profileAccountSettingText, !welcomeBranding?.termsAndConditions?.trim() && styles.muted]}>Terms and conditions</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.profileAccountSettingItem}
+                onPress={() => {
+                  if (welcomeBranding?.privacyPolicy?.trim()) {
+                    setLegalModalContent({ title: 'Privacy Policy', body: welcomeBranding.privacyPolicy.trim() });
+                  }
+                }}
+                disabled={!welcomeBranding?.privacyPolicy?.trim()}
+              >
+                <MaterialIcons name="policy" size={20} color={colors.primary} />
+                <Text style={[styles.profileAccountSettingText, !welcomeBranding?.privacyPolicy?.trim() && styles.muted]}>Privacy policy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.profileAccountSettingItem}
+                onPress={() => setDeleteAccountModalVisible(true)}
+              >
+                <MaterialIcons name="delete-outline" size={20} color={colors.error} />
+                <Text style={[styles.profileAccountSettingText, { color: colors.error }]}>Delete account</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <Modal visible={deleteAccountModalVisible} animationType="fade" transparent>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Delete account</Text>
+                <Text style={styles.modalBody}>
+                  To delete your account and associated data, please contact support. Your data will be removed as per our privacy policy.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.button, styles.buttonPrimary, { marginTop: 16 }]}
+                  onPress={() => setDeleteAccountModalVisible(false)}
+                >
+                  <Text style={styles.buttonText}>OK</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        </ScrollView>
+      );
+    } else {
+      const winWidth = Dimensions.get('window').width;
+      // Full width; height is adjustable (ratio of width, e.g. 0.5 = half, 9/16 ≈ 0.56 for banner)
+      const carouselHeightRatio = 9 / 16;
+      const carouselHeight = Math.round(winWidth * carouselHeightRatio);
+      const bannerImages = [
+        require('./assets/banners/banner1.png'),
+        require('./assets/banners/banner2.png'),
+        require('./assets/banners/banner3.png'),
+      ];
+      const showApiCarousel = carouselImageUrls.length > 0;
+      content = (
+        <View style={styles.homeLayout}>
+          <View style={styles.homeTopSection}>
+            <ScrollView
+              style={[styles.scroll, styles.homeTopScroll]}
+              contentContainerStyle={[styles.scrollContent, styles.scrollContentNoTopPadding]}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl refreshing={homeRefreshing} onRefresh={onHomeRefresh} colors={[colors.primary]} tintColor={colors.primary} />
+              }
+            >
+              <View style={styles.carouselWrapper}>
+            <ScrollView
+              ref={carouselScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              decelerationRate="fast"
+              snapToInterval={winWidth}
+              snapToAlignment="start"
+              contentContainerStyle={styles.carouselContent}
+              onMomentumScrollEnd={(e) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / winWidth);
+                carouselPageRef.current = idx;
+                setCarouselPage(idx);
+              }}
+            >
+              {showApiCarousel
+                ? carouselImageUrls.map((url, index) => (
+                    <View key={index} style={[styles.carouselSlide, { width: winWidth, height: carouselHeight }]}>
+                      <Image source={{ uri: carouselImageFullUrl(url) }} style={styles.carouselImage} resizeMode="cover" />
+                    </View>
+                  ))
+                : bannerImages.map((src, index) => (
+                    <View key={index} style={[styles.carouselSlide, { width: winWidth, height: carouselHeight }]}>
+                      <Image source={src} style={styles.carouselImage} resizeMode="cover" />
+                    </View>
+                  ))}
+            </ScrollView>
+            {(showApiCarousel ? carouselImageUrls.length : 3) > 1 && (
+              <View style={styles.carouselPagination}>
+                {Array.from({ length: showApiCarousel ? carouselImageUrls.length : 3 }).map((_, i) => {
+                  const totalSlides = showApiCarousel ? carouselImageUrls.length : 3;
+                  const activeIndex = Math.min(carouselPage, totalSlides - 1);
+                  return (
+                    <View
+                      key={i}
+                      style={[
+                        styles.carouselDot,
+                        i === activeIndex && styles.carouselDotActive,
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+            )}
+          </View>
+          <View style={styles.card}>
+                <Text style={styles.title}>Welcome{ name ? `, ${name}` : ''}</Text>
+                <Text style={styles.subtitle}>Use the menu below to book a pickup, view subscriptions, orders, or manage your profile.</Text>
+                {error && <Text style={styles.error}>{error}</Text>}
+              </View>
+            </ScrollView>
+          </View>
+          <View style={styles.homeActiveOrdersCenter}>
+            {token && (() => {
+              const activeOrders = orders.filter((o) => {
+                const s = (o.status || '').toUpperCase();
+                return s !== 'DELIVERED' && s !== 'CANCELLED';
+              });
+              if (activeOrders.length > 0) {
+                return (
+                  <View style={styles.activeOrdersSection}>
+                    <Text style={styles.activeOrdersTitle}>Active Orders</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.activeOrdersScroll}
+                    >
+                      {activeOrders.map((o) => {
+                        const src = (o as OrderSummary & { orderSource?: string | null }).orderSource;
+                        const typ = (o as OrderSummary & { orderType?: string }).orderType;
+                        const typeLabel = src === 'WALK_IN' ? 'Walk-in' : typ === 'SUBSCRIPTION' ? 'Subscription' : 'Online';
+                        const isPaid = o.paymentStatus === 'CAPTURED';
+                        return (
+                          <TouchableOpacity
+                            key={o.id}
+                            style={styles.activeOrderCard}
+                            onPress={() => {
+                              setSelectedOrderId(o.id);
+                              setOrderDetail(null);
+                              setOrderInvoices([]);
+                              setHomeScreen('orderDetail');
+                            }}
+                          >
+                            <View style={styles.activeOrderCardLeft}>
+                              <View style={styles.activeOrderCardTop}>
+                                <Text style={styles.activeOrderId} numberOfLines={1}>#{o.id}</Text>
+                                <View style={styles.activeOrderTag}>
+                                  <Text style={styles.activeOrderTagText}>{typeLabel}</Text>
+                                </View>
+                                <Text style={styles.activeOrderServiceLine} numberOfLines={1}>
+                                  {(o.serviceType || '').split(',').map((s) => serviceTypeDisplayLabel(s.trim())).filter(Boolean).join(', ')}
+                                </Text>
+                                <Text style={styles.activeOrderDateLine}>{String(o.pickupDate).slice(0, 10)}</Text>
+                              </View>
+                              <View style={styles.activeOrderCardPayment}>
+                                {isPaid ? (
+                                  <View style={styles.activeOrderPaidRow}>
+                                    <View style={styles.activeOrderPaidTickCircle}>
+                                      <MaterialIcons name="check" size={10} color={colors.white} />
+                                    </View>
+                                    <Text style={styles.activeOrderPaidText}>Paid{o.amountToPayPaise != null && o.amountToPayPaise > 0 ? ` ₹${(o.amountToPayPaise / 100).toFixed(2)}` : ''}</Text>
+                                  </View>
+                                ) : o.paymentStatus === 'FAILED' ? (
+                                  <Text style={styles.activeOrderPaymentFailed}>Payment failed</Text>
+                                ) : o.amountToPayPaise != null && o.amountToPayPaise > 0 ? (
+                                  <Text style={styles.activeOrderToPay}>To pay: ₹{(o.amountToPayPaise / 100).toFixed(2)}</Text>
+                                ) : null}
+                              </View>
+                              <View style={styles.activeOrderCardStatus}>
+                                <Text style={[styles.activeOrderStatus, o.status === 'CANCELLED' && styles.orderTileStatusCancelled]}>{orderStatusLabel(o.status)}</Text>
+                              </View>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                );
+              }
+              return (
+                <View style={styles.noActiveOrdersWrapper}>
+                  <Text style={styles.noActiveOrdersText}>No active orders</Text>
+                </View>
+              );
+            })()}
+          </View>
+        </View>
+      );
+    }
+  }
+
+  const showBottomNav = step === 'done';
+
+  return (
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <StatusBar style="dark" />
+        <KeyboardAvoidingView
+          style={[styles.container, showBottomNav && styles.containerWithNav]}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          {showBottomNav ? (
+            <View style={styles.mainWithNav}>
+              <View style={styles.topNavBar}>
+                <View style={styles.topNavLogo}>
+                  {welcomeBranding?.logoUrl ? (
+                    <Image
+                      key={welcomeBranding.logoUrl}
+                      source={{ uri: brandingLogoFullUrl(welcomeBranding.logoUrl) ?? '' }}
+                      style={styles.topNavLogoImage}
+                      resizeMode="contain"
+                      accessibilityLabel="Logo"
+                    />
+                  ) : (
+                    <Text style={styles.topNavLogoText} numberOfLines={1}>
+                      {welcomeBranding?.businessName?.slice(0, 2)?.toUpperCase() ?? 'We'}
+                    </Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.topNavBell}
+                  onPress={() => {
+                    if (token) fetchOrders();
+                    setNotificationsModalVisible(true);
+                  }}
+                  accessibilityLabel="Notifications"
+                >
+                  <MaterialIcons name="notifications-none" size={26} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.contentArea}>{content}</View>
+              <View style={styles.bottomNavWrapper}>
+                <View style={styles.bottomNav}>
+                  <View style={styles.navSideGroupLeft}>
+                    <TouchableOpacity
+                      style={[styles.navItem, homeScreen === 'home' && styles.navItemActive]}
+                      onPress={() => { setError(null); setHomeScreen('home'); }}
+                    >
+                      <MaterialIcons name="home" size={24} color={homeScreen === 'home' ? colors.white : colors.navBarIcon} />
+                      <Text style={[styles.navItemText, homeScreen === 'home' && styles.navItemTextActive]} numberOfLines={1}>Home</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.navItem, (homeScreen === 'subscriptions' || homeScreen === 'subscriptionDetail') && styles.navItemActive]}
+                      onPress={() => { setError(null); setHomeScreen('subscriptions'); setSelectedSubscriptionId(null); setSubscriptionDetail(null); }}
+                    >
+                      <MaterialIcons name="card-membership" size={24} color={homeScreen === 'subscriptions' ? colors.white : colors.navBarIcon} />
+                      <Text style={[styles.navItemText, homeScreen === 'subscriptions' && styles.navItemTextActive]} numberOfLines={1}>Plans</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.navCenterSlot} pointerEvents="box-none">
+                    <TouchableOpacity
+                      style={styles.navBookNowButton}
+                      onPress={() => {
+                        setError(null);
+                        bookingFromSubscriptionRef.current = false;
+                        setBookingSubscriptionId(null);
+                        setBookingSubscriptionValidFrom(null);
+                        setBookingSubscriptionValidTill(null);
+                        setBookingStep('services');
+                        setSelectedServiceIds([]);
+                        setBookingAddressId(null);
+                        setBookingAddress(null);
+                        setBookingDate('');
+                        setBookingTimeSlot('');
+                        setSlotAvailability(null);
+                        setHomeScreen('bookPickup');
+                      }}
+                    >
+                      <MaterialIcons name="event-available" size={30} color={colors.white} />
+                    </TouchableOpacity>
+                    <Text style={styles.navBookNowLabel} numberOfLines={1}>Book Now</Text>
+                  </View>
+                  <View style={styles.navSideGroupRight}>
+                    <TouchableOpacity
+                      style={[styles.navItem, homeScreen === 'myOrders' && styles.navItemActive]}
+                      onPress={() => { setError(null); setHomeScreen('myOrders'); fetchOrders(); }}
+                    >
+                      <MaterialIcons name="receipt-long" size={24} color={homeScreen === 'myOrders' ? colors.white : colors.navBarIcon} />
+                      <Text style={[styles.navItemText, homeScreen === 'myOrders' && styles.navItemTextActive]} numberOfLines={1}>Orders</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.navItem, homeScreen === 'profile' && styles.navItemActive]}
+                      onPress={() => { setError(null); setHomeScreen('profile'); if (token) getMe(token).then((me) => { setName(me.user.name ?? ''); setEmail(me.user.email ?? ''); setUserPhone(me.user.phone ?? ''); }); }}
+                    >
+                      <MaterialIcons name="person" size={24} color={homeScreen === 'profile' ? colors.white : colors.navBarIcon} />
+                      <Text style={[styles.navItemText, homeScreen === 'profile' && styles.navItemTextActive]} numberOfLines={1}>Profile</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : (
+            content
+          )}
+        </KeyboardAvoidingView>
+        <Modal visible={!!purchaseConfirm} animationType="fade" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Confirm subscription</Text>
+              <Text style={styles.modalBody}>
+                {purchaseConfirm
+                  ? `This subscription will be assigned to "${purchaseConfirm.addressLabel}". It cannot be changed later. Do you want to continue?`
+                  : ''}
+              </Text>
+              <View style={styles.modalButtonRow}>
+                <TouchableOpacity
+                  style={[styles.button, styles.buttonSecondary, styles.modalButton]}
+                  onPress={() => {
+                    setHighlightPlansAddressSection(true);
+                    setPurchaseConfirm(null);
+                  }}
+                >
+                  <Text style={styles.buttonSecondaryText}>Change address</Text>
+                </TouchableOpacity>
+                <View style={styles.modalButtonSpacer} />
+                <TouchableOpacity
+                  style={[styles.button, styles.buttonPrimary, styles.modalButton]}
+                  disabled={purchaseLoading}
+                  onPress={async () => {
+                    if (!token || !purchaseConfirm) return;
+                    setPurchaseError(null);
+                    setPurchaseSuccess(null);
+                    setPurchaseLoading(true);
+                    try {
+                      await purchaseSubscription(token, purchaseConfirm.planId, purchaseConfirm.addressId);
+                      setPurchaseSuccess(`Purchased "${purchaseConfirm.planName}" successfully.`);
+                      fetchSubscriptionsData();
+                      setPurchaseConfirm(null);
+                    } catch (err) {
+                      setPurchaseError(err instanceof Error ? err.message : 'Payment failed');
+                    } finally {
+                      setPurchaseLoading(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.buttonText}>{purchaseLoading ? 'Processing…' : 'Confirm'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+        <Modal visible={!!legalModalContent} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>{legalModalContent?.title ?? ''}</Text>
+              <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+                <Text style={styles.modalBody}>{legalModalContent?.body ?? ''}</Text>
+              </ScrollView>
+              <TouchableOpacity style={[styles.button, { marginTop: 12 }]} onPress={() => setLegalModalContent(null)}>
+                <Text style={styles.buttonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+        <Modal
+          visible={notificationsModalVisible}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setNotificationsModalVisible(false)}
+        >
+          <View style={styles.notificationsModalOverlay}>
+            <TouchableWithoutFeedback onPress={() => setNotificationsModalVisible(false)}>
+              <View style={StyleSheet.absoluteFill} />
+            </TouchableWithoutFeedback>
+            <View style={styles.notificationsModalCard}>
+                  <View style={styles.notificationsModalHeader}>
+                    <View style={styles.notificationsModalTitleRow}>
+                      <View style={styles.notificationsModalBellIcon}>
+                        <MaterialIcons name="notifications" size={22} color={colors.primary} />
+                      </View>
+                      <Text style={styles.notificationsModalTitle}>Notifications</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setNotificationsModalVisible(false)}
+                      style={styles.notificationsModalCloseBtn}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    >
+                      <MaterialIcons name="close" size={22} color={colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                  {notificationsList.length === 0 ? (
+                    <View style={styles.notificationsEmptyState}>
+                      <View style={styles.notificationsEmptyIconWrap}>
+                        <MaterialIcons name="notifications-none" size={40} color={colors.textSecondary} />
+                      </View>
+                      <Text style={styles.notificationsEmptyText}>No notifications yet</Text>
+                      <Text style={styles.notificationsEmptySubtext}>Updates will appear here</Text>
+                    </View>
+                  ) : (
+                    <ScrollView
+                      style={styles.notificationsListScroll}
+                      contentContainerStyle={styles.notificationsListContent}
+                      showsVerticalScrollIndicator={true}
+                      bounces={true}
+                    >
+                      {notificationsList.map((n) => (
+                        <TouchableOpacity
+                          key={n.id}
+                          style={styles.notificationRow}
+                          onPress={() => {
+                            setNotificationsModalVisible(false);
+                            if (n.orderId) {
+                              setSelectedOrderId(n.orderId);
+                              setOrderDetail(null);
+                              setOrderInvoices([]);
+                              setHomeScreen('orderDetail');
+                            } else if (n.subscriptionId) {
+                              setSelectedSubscriptionId(n.subscriptionId);
+                              setHomeScreen('subscriptionDetail');
+                            }
+                          }}
+                          activeOpacity={0.6}
+                        >
+                          <View style={styles.notificationRowContent}>
+                            <Text style={styles.notificationRowTitle}>{n.title}</Text>
+                            <Text style={styles.notificationRowBody}>{n.body}</Text>
+                            {n.sortDate ? (
+                              <Text style={styles.notificationRowTime}>
+                                {n.sortDate.slice(0, 10)}{n.sortDate.length > 10 ? ` · ${n.sortDate.slice(11, 16)}` : ''}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <MaterialIcons name="chevron-right" size={22} color={colors.primary} />
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )}
+            </View>
+          </View>
+        </Modal>
+        {showGoogleMapsPicker && (
+          <Modal visible animationType="slide" onRequestClose={() => setShowGoogleMapsPicker(false)}>
+            <SafeAreaView style={styles.googleMapsModalContainer}>
+              <View style={styles.googleMapsModalHeader}>
+                <Text style={styles.googleMapsModalTitle}>Search location</Text>
+                <TouchableOpacity onPress={() => setShowGoogleMapsPicker(false)} style={styles.googleMapsCloseBtn}>
+                  <MaterialIcons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+              <WebView
+                ref={googleMapsWebViewRef}
+                source={{ uri: 'https://www.google.com/maps' }}
+                style={styles.googleMapsWebView}
+                onNavigationStateChange={(nav) => {
+                  if (nav?.url) setLastGoogleMapsUrl(nav.url);
+                }}
+                onMessage={(e) => {
+                  try {
+                    const data = JSON.parse(e.nativeEvent.data);
+                    if (data?.type === 'MAPS_URL' && typeof data?.url === 'string' && onMapsUrlReceivedRef.current) {
+                      const cb = onMapsUrlReceivedRef.current;
+                      onMapsUrlReceivedRef.current = null;
+                      cb(data.url);
+                    }
+                  } catch (_) {}
+                }}
+              />
+              <View style={styles.googleMapsModalFooter}>
+                <TouchableOpacity
+                  style={[styles.button, addFromMapsLoading && styles.buttonDisabled]}
+                  disabled={addFromMapsLoading}
+                  onPress={() => {
+                    setAddFromMapsLoading(true);
+                    onMapsUrlReceivedRef.current = async (url: string) => {
+                      try {
+                        const finalUrl = url || lastGoogleMapsUrl || 'https://www.google.com/maps';
+                        setAddGoogleUrl(finalUrl);
+                        const coords = parseLatLngFromMapsUrl(finalUrl);
+                        if (coords) {
+                          const result = await reverseGeocodeAddress(coords.lat, coords.lng);
+                          if (result) {
+                            setAddStreetArea([result.street, result.area].filter(Boolean).join(', '));
+                            setAddCity(result.city);
+                            setAddPincode(result.pincode);
+                            setAddAddressLine(result.addressLine);
+                          }
+                        }
+                      } finally {
+                        setAddFromMapsLoading(false);
+                        setShowGoogleMapsPicker(false);
+                        onMapsUrlReceivedRef.current = null;
+                      }
+                    };
+                    const script = `(function(){try{var u=window.location.href;window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'MAPS_URL',url:u}));}catch(e){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'MAPS_URL',url:''}));}})();`;
+                    googleMapsWebViewRef.current?.injectJavaScript(script);
+                    setTimeout(() => {
+                      if (onMapsUrlReceivedRef.current) {
+                        const cb = onMapsUrlReceivedRef.current;
+                        onMapsUrlReceivedRef.current = null;
+                        cb(lastGoogleMapsUrl || 'https://www.google.com/maps');
+                      }
+                    }, 1500);
+                  }}
+                >
+                  <Text style={styles.buttonText}>{addFromMapsLoading ? 'Getting address…' : 'Add to Address'}</Text>
+                </TouchableOpacity>
+                <Text style={styles.muted}>Address will be auto-filled from the map location when possible.</Text>
+              </View>
+            </SafeAreaView>
+          </Modal>
+        )}
+      </SafeAreaView>
+    </SafeAreaProvider>
+  );
+}
+
+// Theme: Magenta primary + 5 light pink elevation backgrounds
+const colors = {
+  primary: '#C2185B',
+  primaryLight: '#F8BBD9',
+  primaryDark: '#880E4F',
+  navBarDark: '#6A0D3E',
+  navBarIcon: 'rgba(255,255,255,0.75)',
+  elevation0: '#FFF5F9',
+  elevation1: '#FFEDF4',
+  elevation2: '#FFE4EE',
+  elevation3: '#FFDAE8',
+  elevation4: '#FFD0E2',
+  elevation5: '#FFC6DC',
+  white: '#FFFFFF',
+  text: '#1a1a2e',
+  textSecondary: '#6b7280',
+  border: '#F5C6DC',
+  borderLight: '#FFE0EB',
+  error: '#b91c1c',
+  success: '#166534',
+  successBg: '#f0fdf4',
+  successBorder: '#bbf7d0',
+};
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.elevation1,
+  },
+  topNavBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minHeight: 48,
+    backgroundColor: colors.elevation0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderLight,
+  },
+  topNavLogo: {
+    width: 120,
+    height: 36,
+    justifyContent: 'center',
+  },
+  topNavLogoImage: {
+    width: 120,
+    height: 36,
+  },
+  topNavLogoText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  topNavBell: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 0,
+    justifyContent: 'center',
+  },
+  containerWithNav: {
+    justifyContent: 'flex-start',
+  },
+  mainWithNav: {
+    flex: 1,
+  },
+  contentArea: {
+    flex: 1,
+    backgroundColor: colors.elevation1,
+  },
+  homeLayout: {
+    flex: 1,
+    backgroundColor: colors.elevation1,
+  },
+  homeTopSection: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  homeTopScroll: {
+    flex: 0,
+  },
+  homeActiveOrdersCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 0,
+  },
+  bottomNavWrapper: {
+    paddingHorizontal: 16,
+    paddingBottom: 28,
+    paddingTop: 8,
+    alignItems: 'center',
+    backgroundColor: colors.elevation0,
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.navBarDark,
+    borderRadius: 28,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    height: 80,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
+    position: 'relative',
+  },
+  navSideGroupLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    columnGap: 12,
+  },
+  navSideGroupRight: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    columnGap: 12,
+  },
+  navItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    gap: 4,
+    minWidth: 56,
+  },
+  navItemActive: {
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    marginHorizontal: 2,
+    marginVertical: 2,
+  },
+  navItemText: {
+    fontSize: 11,
+    color: colors.navBarIcon,
+    fontWeight: '500',
+  },
+  navItemTextActive: {
+    color: colors.white,
+    fontWeight: '600',
+  },
+  navCenterSlot: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 0,
+  },
+  navBookNowButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.primary,
+    borderWidth: 6,
+    borderColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -32,
+  },
+  navBookNowLabel: {
+    fontSize: 10,
+    color: colors.white,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  card: {
+    borderRadius: 18,
+    padding: 24,
+    marginHorizontal: 12,
+    backgroundColor: colors.elevation3,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  activeOrdersSection: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  noActiveOrdersWrapper: {
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noActiveOrdersText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  activeOrdersTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    marginHorizontal: 12,
+    marginBottom: 12,
+  },
+  activeOrdersScroll: {
+    paddingHorizontal: 12,
+    gap: 12,
+    flexDirection: 'row',
+    paddingRight: 24,
+  },
+  activeOrderCard: {
+    width: 200,
+    minHeight: 160,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: colors.elevation3,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  activeOrderCardLeft: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'flex-start',
+  },
+  activeOrderCardStatus: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  activeOrderCardTop: {
+    flex: 1,
+    minHeight: 0,
+  },
+  activeOrderCardPayment: {
+    marginTop: 8,
+  },
+  activeOrderCardRight: {
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    alignSelf: 'stretch',
+    paddingLeft: 8,
+    minWidth: 100,
+  },
+  activeOrderId: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  activeOrderTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  activeOrderTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  activeOrderServiceLine: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  activeOrderDateLine: {
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  activeOrderPaidTickCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeOrderPaidRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  activeOrderPaidText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  activeOrderPaymentFailed: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.error,
+    marginBottom: 4,
+  },
+  activeOrderToPay: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.success,
+    marginBottom: 4,
+  },
+  activeOrderMeta: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  activeOrderStatus: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  welcomeScreenOuter: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: 48,
+  },
+  welcomeCard: {
+    borderRadius: 20,
+    padding: 28,
+    marginHorizontal: 12,
+    backgroundColor: '#FFD0E2',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 4,
+    alignSelf: 'stretch',
+  },
+  welcomeHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  welcomeLogo: {
+    width: 140,
+    height: 140,
+    marginBottom: 12,
+  },
+  welcomeLogoPlaceholder: {
+    width: 140,
+    height: 140,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  welcomeLogoPlaceholderText: {
+    fontSize: 42,
+    fontWeight: '700',
+    color: colors.white,
+    letterSpacing: 1,
+  },
+  welcomeSubtitle: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  termsPrivacyBlock: {
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  checkboxTouchTarget: {
+    padding: 4,
+    margin: -4,
+  },
+  termsCheckbox: {
+    width: 22,
+    height: 22,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  termsCheckboxChecked: {
+    backgroundColor: colors.primary,
+  },
+  checkboxLabel: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  linkText: {
+    color: colors.primary,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    marginTop: 16,
+  },
+  modalButton: {
+    flex: 1,
+  },
+  modalButtonSpacer: {
+    width: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  modalScroll: {
+    maxHeight: 400,
+  },
+  modalScrollContent: {
+    paddingBottom: 16,
+  },
+  modalBody: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 22,
+  },
+  notificationsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  notificationsModalCard: {
+    backgroundColor: colors.elevation1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    maxHeight: '80%',
+    overflow: 'hidden',
+    paddingBottom: 16,
+    shadowColor: colors.primaryDark,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  notificationsModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    backgroundColor: colors.elevation0,
+  },
+  notificationsModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  notificationsModalBellIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationsModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  notificationsModalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.elevation2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  notificationsEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+  },
+  notificationsEmptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.elevation2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  notificationsEmptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  notificationsEmptySubtext: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  notificationsListScroll: {
+    maxHeight: 360,
+    flexGrow: 0,
+  },
+  notificationsListContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
+  notificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+    borderRadius: 12,
+    backgroundColor: colors.elevation2,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  notificationRowContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  notificationRowTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  notificationRowBody: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  notificationRowTime: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 8,
+    color: colors.text,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  orderDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 16,
+    gap: 8,
+  },
+  orderDetailLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  orderDetailValue: {
+    fontSize: 14,
+    color: '#000000',
+    flex: 1,
+  },
+  statusChip: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  statusChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    marginBottom: 12,
+    backgroundColor: colors.elevation2,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  inputReadOnly: {
+    backgroundColor: colors.elevation1,
+    color: colors.textSecondary,
+  },
+  countryCodeInput: {
+    width: 90,
+    marginRight: 8,
+  },
+  mobileInput: {
+    flex: 1,
+  },
+  datePickerButton: {
+    justifyContent: 'center',
+  },
+  datePickerButtonText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  datePickerPlaceholder: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  button: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonPrimary: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+  },
+  rowButton: {
+    flex: 1,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  buttonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonSecondary: {
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    backgroundColor: colors.elevation2,
+  },
+  buttonSecondaryText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  textButton: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  textButtonText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    textDecorationLine: 'underline',
+  },
+  profileLogoutButton: {
+    marginTop: 24,
+    borderColor: colors.error,
+  },
+  profileLogoutText: {
+    color: colors.error,
+    fontWeight: '600',
+  },
+  profileAccountSettingsRow: {
+    marginTop: 4,
+  },
+  profileAccountSettingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 0,
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderLight,
+  },
+  profileAccountSettingText: {
+    fontSize: 15,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  error: {
+    color: colors.error,
+    marginBottom: 8,
+    fontSize: 13,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  orderFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  orderFilterChip: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.elevation2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
+  },
+  orderFilterChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  orderFilterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  orderFilterChipTextActive: {
+    color: colors.white,
+  },
+  plansTabToggle: {
+    flexDirection: 'row',
+    width: '100%',
+    marginBottom: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.elevation2,
+    padding: 3,
+  },
+  plansTabToggleSegment: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plansTabToggleSegmentActive: {
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  plansTabToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  plansTabToggleTextActive: {
+    color: colors.primaryDark,
+  },
+  scroll: {
+    flex: 1,
+    backgroundColor: colors.elevation1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 0,
+    paddingVertical: 24,
+    paddingBottom: 48,
+    backgroundColor: colors.elevation1,
+  },
+  scrollContentNoTopPadding: {
+    paddingTop: 0,
+  },
+  confirmScrollContent: {
+    paddingBottom: 120,
+  },
+  floatingSubmitWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
+    alignItems: 'center',
+  },
+  floatingSubmitButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 18,
+    paddingHorizontal: 48,
+    borderRadius: 28,
+    minWidth: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  floatingSubmitText: {
+    color: colors.white,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  carouselWrapper: {
+    width: '100%',
+    alignSelf: 'stretch',
+    marginBottom: 8,
+  },
+  carouselPagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  carouselDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.borderLight,
+  },
+  carouselDotActive: {
+    backgroundColor: colors.primary,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  carouselContent: {
+    paddingVertical: 4,
+    paddingHorizontal: 0,
+  },
+  carouselSlide: {
+    overflow: 'hidden',
+    backgroundColor: colors.elevation2,
+    alignSelf: 'stretch',
+  },
+  carouselImage: {
+    width: '100%',
+    height: '100%',
+  },
+  tileGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 16,
+  },
+  serviceTile: {
+    width: '47%',
+    minHeight: 88,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.elevation2,
+    padding: 16,
+    justifyContent: 'center',
+  },
+  serviceTileSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.elevation3,
+  },
+  serviceIcon: {
+    fontSize: 28,
+    marginBottom: 6,
+  },
+  serviceLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  serviceLabelSelected: {
+    color: colors.text,
+  },
+  muted: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  addressCard: {
+    padding: 12,
+    backgroundColor: colors.elevation2,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  activePlanTile: {
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    backgroundColor: colors.elevation2,
+    borderRadius: 12,
+  },
+  activePlanTileTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  activePlanTileSubtext: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    marginTop: 6,
+  },
+  plansPageWrapper: {
+    marginHorizontal: 12,
+    padding: 24,
+  },
+  contentPageWrapper: {
+    marginHorizontal: 12,
+    padding: 24,
+  },
+  plansSubtitleOneLine: {
+    marginBottom: 8,
+  },
+  availablePlansScroll: {
+    marginHorizontal: -36,
+    marginBottom: 16,
+  },
+  availablePlansScrollContent: {
+    paddingLeft: 36,
+    paddingRight: 0,
+  },
+  availablePlanTile: {
+    width: 260,
+    height: 180,
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  availablePlanTileInner: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    justifyContent: 'space-between',
+  },
+  availablePlanTilePurchased: {
+    backgroundColor: colors.primaryLight,
+  },
+  availablePlanTileTitleLight: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  availablePlanTileDescLight: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.95)',
+    marginBottom: 4,
+  },
+  availablePlanTileMetaLight: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  availablePlansHeaderRow: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    gap: 8,
+  },
+  availablePlansTitle: {
+    fontWeight: '600',
+    flexShrink: 0,
+    color: '#000000',
+  },
+  availablePlansBranchTag: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
+    flexShrink: 0,
+  },
+  plansAddressSection: {
+    marginBottom: 12,
+  },
+  plansAddressSectionHighlight: {
+    backgroundColor: colors.primaryLight,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  addressCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: colors.elevation2,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  editAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingLeft: 12,
+  },
+  editAddressButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  defaultAddressTag: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  defaultAddressTagText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  deleteAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingLeft: 8,
+  },
+  deleteAddressButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.error,
+  },
+  googleMapsOpenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: colors.elevation2,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  googleMapsOpenText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  googleMapsModalContainer: {
+    flex: 1,
+    backgroundColor: colors.elevation0,
+  },
+  googleMapsModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    backgroundColor: colors.elevation1,
+  },
+  googleMapsModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  googleMapsCloseBtn: {
+    padding: 4,
+  },
+  googleMapsWebView: {
+    flex: 1,
+    backgroundColor: colors.elevation0,
+  },
+  googleMapsModalFooter: {
+    padding: 16,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    backgroundColor: colors.elevation1,
+  },
+  orderTileCard: {
+    position: 'relative',
+  },
+  orderTileHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 4,
+  },
+  orderTileOrderId: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+  },
+  orderTileTag: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexShrink: 0,
+  },
+  orderTileTagText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  orderTileStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+  },
+  orderTileStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  orderTileStatusCancelled: {
+    color: colors.error,
+  },
+  addressLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  orderAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.success,
+    marginTop: 6,
+  },
+  orderAmountPaidRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  paidTickCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderAmountPaid: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  amountToPayBox: {
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 16,
+    backgroundColor: colors.successBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+  },
+  amountToPayLabel: {
+    fontSize: 14,
+    color: colors.success,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  amountToPayValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#14532d',
+  },
+  amountPaidBox: {
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 16,
+    backgroundColor: colors.elevation3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+  },
+  amountPaidBoxGradient: {
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  paidTickCircleOnGreen: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  amountPaidLabelOnGradient: {
+    fontSize: 14,
+    color: colors.white,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  amountPaidValueOnGradient: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  amountPaidMutedOnGradient: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 4,
+  },
+  amountPaidLabel: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  amountPaidValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  invoiceRow: {
+    marginBottom: 12,
+  },
+  invoiceTypeLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 10,
+    textTransform: 'uppercase',
+  },
+  invoiceItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.elevation2,
+  },
+  invoiceItemName: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginRight: 12,
+  },
+  invoiceItemAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  invoiceTotals: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  invoiceTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  invoiceTotalLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  invoiceTotalValue: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  invoiceTotalRowFinal: {
+    marginTop: 6,
+    marginBottom: 0,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  invoiceTotalLabelFinal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  invoiceTotalValueFinal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  invoiceActions: {
+    flexDirection: 'row',
+    marginTop: 10,
+    gap: 10,
+  },
+  invoicePreviewContainer: {
+    height: 360,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.elevation2,
+  },
+  invoicePreviewWebView: {
+    flex: 1,
+  },
+  invoiceCta: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  invoiceCtaDownload: {
+    backgroundColor: colors.elevation2,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  invoiceCtaShare: {
+    backgroundColor: colors.primary,
+  },
+  invoiceCtaText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  addressLine: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  addressPincode: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  link: {
+    fontSize: 12,
+    color: colors.primary,
+    marginTop: 4,
+  },
+  serviceabilityBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+  },
+  serviceabilityBoxNotServiceable: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  serviceableText: {
+    fontSize: 14,
+    color: colors.success,
+    fontWeight: '500',
+  },
+  notServiceableText: {
+    fontSize: 14,
+    color: colors.error,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  notServiceableSubtext: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 10,
+  },
+  areaRequestButton: {
+    marginTop: 4,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingVertical: 4,
+    minHeight: 44,
+  },
+  checkbox: {
+    fontSize: 28,
+    marginRight: 12,
+    minWidth: 36,
+    minHeight: 36,
+    textAlignVertical: 'center',
+  },
+  checkLabel: {
+    fontSize: 16,
+    color: colors.text,
+    flex: 1,
+  },
+});

@@ -1,0 +1,130 @@
+%PDF-1.1
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents 4 0 R >> endobj
+4 0 obj << /Length 3439 >> stream
+BT
+/F1 11 Tf
+1 0 0 1 50 750 Tm
+(INVOICE) Tj
+1 0 0 1 50 736 Tm
+(Type: SUBSCRIPTION) Tj
+1 0 0 1 50 722 Tm
+(Invoice #: cd3a2aa0-8e31-4315-87fe-208d5167fe89) Tj
+1 0 0 1 50 708 Tm
+(Subscription purchase) Tj
+1 0 0 1 50 694 Tm
+(Issued: 2026-02-18T06:45:59.977Z) Tj
+1 0 0 1 50 680 Tm
+() Tj
+1 0 0 1 50 666 Tm
+(Business:) Tj
+1 0 0 1 50 652 Tm
+(We You Laundry) Tj
+1 0 0 1 50 638 Tm
+(Demo Address) Tj
+1 0 0 1 50 624 Tm
+(+91-9000000000) Tj
+1 0 0 1 50 610 Tm
+(Note: Thank you!) Tj
+1 0 0 1 50 596 Tm
+() Tj
+1 0 0 1 50 582 Tm
+(Customer:) Tj
+1 0 0 1 50 568 Tm
+(Karthik Burra) Tj
+1 0 0 1 50 554 Tm
+(+919999999999) Tj
+1 0 0 1 50 540 Tm
+() Tj
+1 0 0 1 50 526 Tm
+(Items:) Tj
+1 0 0 1 50 512 Tm
+(  Launch Offer x 1 @ 0.00 = 0.00) Tj
+1 0 0 1 50 498 Tm
+() Tj
+1 0 0 1 50 484 Tm
+(Subtotal: 0.00) Tj
+1 0 0 1 50 470 Tm
+(Tax: 0.00) Tj
+1 0 0 1 50 456 Tm
+(Total: 0.00) Tj
+1 0 0 1 50 442 Tm
+() Tj
+1 0 0 1 50 428 Tm
+(          Demo Address | vudev2025@gmail.com | +91-9000000000) Tj
+1 0 0 1 50 414 Tm
+(       It's a computer generated invoice, Signature not required.) Tj
+1 0 0 1 50 400 Tm
+() Tj
+1 0 0 1 50 386 Tm
+(UPI ID: merchant@upi) Tj
+1 0 0 1 50 372 Tm
+(Pay to: Laundry Demo) Tj
+1 0 0 1 50 358 Tm
+(QR code available at: /api/assets/branding/1771136133375-images.png) Tj
+1 0 0 1 50 344 Tm
+() Tj
+1 0 0 1 50 330 Tm
+(Subscription plan:) Tj
+1 0 0 1 50 316 Tm
+(  Valid till: 2026-02-28) Tj
+1 0 0 1 50 302 Tm
+(  No. of pickups: 2) Tj
+1 0 0 1 50 288 Tm
+(  Weight/items limit: 10 kg / N/A) Tj
+1 0 0 1 50 274 Tm
+() Tj
+1 0 0 1 50 260 Tm
+(Terms and Conditions:) Tj
+1 0 0 1 50 246 Tm
+(  Terms & Conditions) Tj
+1 0 0 1 50 232 Tm
+(  Service Scope) Tj
+1 0 0 1 50 218 Tm
+(  Services are provided as per the items and quantities mentioned in this invoice. Any additional items found during processing will be charged accordingly.) Tj
+1 0 0 1 50 204 Tm
+(  Inspection & Claims) Tj
+1 0 0 1 50 190 Tm
+(  Customers are requested to check items at the time of delivery. Any claims regarding loss or damage must be reported within 24 hours of delivery.) Tj
+1 0 0 1 50 176 Tm
+(  Liability) Tj
+1 0 0 1 50 162 Tm
+(  While utmost care is taken during processing, our liability for any loss or damage shall not exceed 5 times the service charge of the affected item, subject to verification.) Tj
+1 0 0 1 50 148 Tm
+(  Stains & Pre-existing Damage) Tj
+1 0 0 1 50 134 Tm
+(  We are not responsible for color bleed, shrinkage, weak fabric, embellishment damage, or stains that cannot be removed through standard cleaning processes.) Tj
+1 0 0 1 50 120 Tm
+(  Delayed Collection) Tj
+1 0 0 1 50 106 Tm
+(  Items not collected within 30 days from the delivery date may attract storage charges. Items unclaimed beyond 90 days may be disposed of.) Tj
+1 0 0 1 50 92 Tm
+(  Payment Terms) Tj
+1 0 0 1 50 78 Tm
+(  Full payment is due upon delivery unless otherwise agreed. Digital payments once processed are non-reversible except in case of verified billing errors.) Tj
+1 0 0 1 50 64 Tm
+(  Turnaround Time) Tj
+1 0 0 1 50 50 Tm
+(  Delivery timelines are estimates and may vary due to operational or unforeseen circumstances.) Tj
+1 0 0 1 50 36 Tm
+(  Subscription Plans \(If Applicable\)) Tj
+1 0 0 1 50 22 Tm
+(  Subscription benefits are valid as per plan terms. Unused services may expire at the end of the subscription period.) Tj
+1 0 0 1 50 8 Tm
+(  Force Majeure) Tj
+1 0 0 1 50 -6 Tm
+(  We are not liable for delays or losses caused by events beyond our reasonable control \(natural disasters, strikes, etc.\).) Tj
+ET
+endstream endobj
+xref
+0 5
+0000000000 65535 f 
+         9 00000 n 
+        58 00000 n 
+       115 00000 n 
+       290 00000 n 
+trailer << /Size 5 /Root 1 0 R >>
+startxref
+3781
+%%EOF

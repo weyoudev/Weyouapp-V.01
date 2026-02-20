@@ -1,0 +1,45 @@
+%PDF-1.1
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >> endobj
+4 0 obj << /Length 511 >> stream
+INVOICE
+Type: ACKNOWLEDGEMENT
+Invoice #: db7d89c4-ec72-45f7-be5b-bef18aadf134
+Order ID: 9a4e295c-8d7f-4331-9d96-8ec849906441
+Issued: 2026-02-13T17:18:30.640Z
+
+Business:
+WeYou Laundry
+Demo Address
++91-9000000000
+Note: Thank you!
+
+Customer:
+Karthik
++919999999999
+
+Items:
+  Bedsheet x 1 @ 20.00 = 20.00
+  Sheo x 1 @ 150.00 = 150.00
+  Discount: -1.00
+
+Subtotal: 170.00
+Tax: 17.00
+Total: 186.00
+
+UPI ID: mahaenterprises@upi
+Pay to: Maha enterprises
+QR code available at: /api/assets/branding/1770969602940-images.png
+endstream endobj
+xref
+0 5
+0000000000 65535 f 
+         9 00000 n 
+        58 00000 n 
+       115 00000 n 
+       202 00000 n 
+trailer << /Size 5 /Root 1 0 R >>
+startxref
+764
+%%EOF

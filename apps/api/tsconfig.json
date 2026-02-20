@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node", "jest"],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../../packages/shared/src/*"],
+      "@prisma/client": ["src/infra/generated/prisma-client"],
+      "@prisma/client/*": ["src/infra/generated/prisma-client/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

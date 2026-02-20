@@ -1,0 +1,110 @@
+import type { PrismaClient } from '@prisma/client';
+import type { CustomersRepo, CustomerRecord, UpdateCustomerPatch, ListCustomersResult, CreateCustomerInput } from '../../../application/ports';
+
+type PrismaLike = Pick<PrismaClient, 'user'>;
+
+function toRecord(row: {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  role: string;
+  notes: string | null;
+  expoPushToken: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): CustomerRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    email: row.email,
+    role: row.role,
+    notes: row.notes,
+    expoPushToken: row.expoPushToken ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export class PrismaCustomersRepo implements CustomersRepo {
+  constructor(private readonly prisma: PrismaLike) {}
+
+  async findByPhone(phoneLike: string): Promise<CustomerRecord[]> {
+    const rows = await this.prisma.user.findMany({
+      where: {
+        role: 'CUSTOMER',
+        phone: { contains: phoneLike, mode: 'insensitive' as const },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toRecord);
+  }
+
+  async getByPhone(phone: string): Promise<CustomerRecord | null> {
+    const row = await this.prisma.user.findFirst({
+      where: { role: 'CUSTOMER', phone: phone.trim() },
+    });
+    return row ? toRecord(row) : null;
+  }
+
+  async getById(userId: string): Promise<CustomerRecord | null> {
+    const row = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    return row ? toRecord(row) : null;
+  }
+
+  async create(input: CreateCustomerInput): Promise<CustomerRecord> {
+    const phone = input.phone.trim();
+    if (!phone) throw new Error('Phone is required');
+    const row = await this.prisma.user.create({
+      data: {
+        role: 'CUSTOMER',
+        phone,
+        name: input.name?.trim() || null,
+        email: input.email?.trim() || null,
+      },
+    });
+    return toRecord(row);
+  }
+
+  async count(): Promise<number> {
+    return this.prisma.user.count({ where: { role: 'CUSTOMER' } });
+  }
+
+  async list(limit: number, cursor?: string | null, search?: string | null): Promise<ListCustomersResult> {
+    const where: { role: string; OR?: Array<{ phone?: { contains: string; mode: 'insensitive' }; name?: { contains: string; mode: 'insensitive' } }> } = { role: 'CUSTOMER' };
+    if (search && search.trim()) {
+      const term = search.trim();
+      where.OR = [
+        { phone: { contains: term, mode: 'insensitive' } },
+        { name: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+    const take = limit + 1;
+    const rows = await this.prisma.user.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take,
+      cursor: cursor ? { id: cursor } : undefined,
+      skip: cursor ? 1 : 0,
+    });
+    const data = rows.slice(0, limit).map(toRecord);
+    const nextCursor = rows.length > limit ? rows[limit - 1].id : null;
+    return { data, nextCursor };
+  }
+
+  async update(userId: string, patch: UpdateCustomerPatch): Promise<CustomerRecord> {
+    const row = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(patch.name !== undefined && { name: patch.name }),
+        ...(patch.email !== undefined && { email: patch.email }),
+        ...(patch.notes !== undefined && { notes: patch.notes }),
+        ...(patch.expoPushToken !== undefined && { expoPushToken: patch.expoPushToken }),
+      },
+    });
+    return toRecord(row);
+  }
+}

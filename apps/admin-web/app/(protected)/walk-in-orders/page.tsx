@@ -1,0 +1,265 @@
+'use client';
+
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { getStoredUser } from '@/lib/auth';
+import { useOrders } from '@/hooks/useOrders';
+import { useBranches } from '@/hooks/useBranches';
+import { OrderStatusBadge, PaymentStatusBadge } from '@/components/shared/StatusBadge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { formatMoney, formatDate } from '@/lib/format';
+import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
+import type { AdminOrderListRow, OrderStatus } from '@/types';
+
+const STATUS_OPTIONS: OrderStatus[] = [
+  'BOOKING_CONFIRMED',
+  'PICKUP_SCHEDULED',
+  'PICKED_UP',
+  'IN_PROCESSING',
+  'READY',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+];
+
+export default function WalkInOrdersPage() {
+  const router = useRouter();
+  const user = useMemo(() => getStoredUser(), []);
+  const isBranchHead = user?.role === 'OPS' && user?.branchId;
+  const { data: branches = [] } = useBranches();
+  const [status, setStatus] = useState<OrderStatus | ''>('');
+  const [branchId, setBranchId] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const limit = 20;
+
+  const effectiveBranchId = isBranchHead ? (user?.branchId ?? branchId) : branchId;
+
+  useEffect(() => {
+    if (isBranchHead && user?.branchId) setBranchId(user.branchId);
+  }, [isBranchHead, user?.branchId]);
+
+  const filters = {
+    orderSource: 'WALK_IN' as const,
+    status: status || undefined,
+    branchId: effectiveBranchId || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    limit,
+    cursor,
+  };
+
+  const { data, isLoading, isFetching, error } = useOrders(filters);
+
+  const handleNext = useCallback(() => {
+    if (data?.nextCursor) setCursor(data.nextCursor);
+  }, [data?.nextCursor]);
+
+  const handlePrev = useCallback(() => {
+    setCursor(undefined);
+  }, []);
+
+  const handleRowClick = useCallback(
+    (id: string) => {
+      router.push(`/orders/${id}`);
+    },
+    [router]
+  );
+
+  if (error) {
+    return (
+      <div>
+        <p className="text-sm text-destructive">Failed to load walk-in orders.</p>
+        <ErrorDisplay error={error} className="mt-2" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Walk-in orders</h1>
+        <Button asChild>
+          <Link href="/walk-in-orders/new">New walk-in order</Link>
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap items-end gap-4 mb-4">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Status</label>
+              <select
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value as OrderStatus | '');
+                  setCursor(undefined);
+                }}
+              >
+                <option value="">All</option>
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Branch</label>
+              {isBranchHead ? (
+                <select
+                  className="h-10 rounded-md border border-input bg-muted px-3 text-sm min-w-[160px]"
+                  value={effectiveBranchId}
+                  disabled
+                  title="Your assigned branch (cannot change)"
+                >
+                  <option value={user?.branchId ?? ''}>
+                    {branches.find((b) => b.id === user?.branchId)?.name ?? user?.branchId ?? '—'}
+                  </option>
+                </select>
+              ) : (
+                <select
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm min-w-[160px]"
+                  value={branchId}
+                  onChange={(e) => {
+                    setBranchId(e.target.value);
+                    setCursor(undefined);
+                  }}
+                  title="Filter by branch"
+                >
+                  <option value="">All branches</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name ?? b.id}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Date from</label>
+              <input
+                type="date"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                value={dateFrom}
+                onChange={(e) => {
+                  setDateFrom(e.target.value);
+                  setCursor(undefined);
+                }}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Date to</label>
+              <input
+                type="date"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                value={dateTo}
+                onChange={(e) => {
+                  setDateTo(e.target.value);
+                  setCursor(undefined);
+                }}
+              />
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order ID</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Address</TableHead>
+                    <TableHead>Branch</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Initiated</TableHead>
+                    <TableHead>Pickup date</TableHead>
+                    <TableHead>Delivered</TableHead>
+                    <TableHead>Payment</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(data?.data ?? []).map((row: AdminOrderListRow) => (
+                    <TableRow
+                      key={row.id}
+                      className="cursor-pointer"
+                      onClick={() => handleRowClick(row.id)}
+                    >
+                      <TableCell className="font-mono text-xs">{row.id.slice(0, 8)}…</TableCell>
+                      <TableCell className="max-w-[120px] truncate" title={row.customerName ?? row.userId}>
+                        {row.customerName ?? row.userId.slice(0, 8) + '…'}
+                      </TableCell>
+                      <TableCell className="max-w-[160px] truncate" title={row.customerAddress}>
+                        {row.customerAddress}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap" title={row.branchName ?? undefined}>
+                        {row.branchName ?? '—'}
+                      </TableCell>
+                      <TableCell>
+                        <OrderStatusBadge status={row.status} />
+                      </TableCell>
+                      <TableCell>{formatDate(row.createdAt)}</TableCell>
+                      <TableCell>{formatDate(row.pickupDate)}</TableCell>
+                      <TableCell>{row.deliveredDate ? formatDate(row.deliveredDate) : '—'}</TableCell>
+                      <TableCell>
+                        <PaymentStatusBadge status={row.paymentStatus} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {row.billTotalPaise != null ? formatMoney(row.billTotalPaise) : 'NA'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {data?.data?.length === 0 && (
+                <div className="p-8 text-center text-muted-foreground">No walk-in orders found.</div>
+              )}
+              <div className="flex items-center justify-between border-t px-4 py-2 mt-2">
+                <span className="text-sm text-muted-foreground">
+                  {data?.data?.length ?? 0} rows
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!cursor || isFetching}
+                    onClick={handlePrev}
+                  >
+                    First
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!data?.nextCursor || isFetching}
+                    onClick={handleNext}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

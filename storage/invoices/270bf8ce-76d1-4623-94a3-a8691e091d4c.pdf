@@ -1,0 +1,44 @@
+%PDF-1.1
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >> endobj
+4 0 obj << /Length 484 >> stream
+INVOICE
+Type: ACKNOWLEDGEMENT
+Invoice #: 270bf8ce-76d1-4623-94a3-a8691e091d4c
+Order ID: 335c2b0f-fed7-46f6-acc8-6c8e4b51890b
+Issued: 2026-02-13T03:04:10.113Z
+
+Business:
+WE you loundry
+Demo Address
++91-9000000000
+Note: Thank you!
+
+Customer:
++919999999999
+
+Items:
+  Jeans x 1 @ 50.00 = 50.00
+  wr x 1 @ 50.00 = 50.00
+  Discount: -34.34
+
+Subtotal: 100.00
+Tax: 3.44
+Total: 69.10
+
+UPI ID: WEYOU@HDCF
+Pay to: WEYOU LAUNDRY
+QR code available at: /api/assets/branding/1770917325866-images.png
+endstream endobj
+xref
+0 5
+0000000000 65535 f 
+         9 00000 n 
+        58 00000 n 
+       115 00000 n 
+       202 00000 n 
+trailer << /Size 5 /Root 1 0 R >>
+startxref
+737
+%%EOF

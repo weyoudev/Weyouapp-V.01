@@ -1,0 +1,45 @@
+%PDF-1.1
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >> endobj
+4 0 obj << /Length 533 >> stream
+INVOICE
+Type: ACKNOWLEDGEMENT
+Invoice #: 8d13eed4-bd17-49a5-a5c6-e367b18707b5
+Order ID: aff51042-babb-4bc9-a412-95c2916ae484
+Issued: 2026-02-12T17:57:43.692Z
+
+Business:
+Laundry Demo
+Demo Address
++91-9000000000
+Note: Thank you!
+
+Customer:
++919999999999
+
+Items:
+  dfgtr x 1 @ 5.66 = 5.66
+  54645 x 5461 @ 546.45 = 2984163.45
+  54645 x 1456 @ 5.46 = 7949.76
+  Discount: -5.46
+
+Subtotal: 2992118.87
+Tax: 55.46
+Total: 2992168.87
+
+UPI ID: WEYOU@HDCF
+Pay to: WEYOU LAUNDRY
+QR code available at: /api/assets/branding/1770917325866-images.png
+endstream endobj
+xref
+0 5
+0000000000 65535 f 
+         9 00000 n 
+        58 00000 n 
+       115 00000 n 
+       202 00000 n 
+trailer << /Size 5 /Root 1 0 R >>
+startxref
+786
+%%EOF

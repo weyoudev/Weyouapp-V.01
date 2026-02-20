@@ -1,0 +1,48 @@
+%PDF-1.1
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >> endobj
+4 0 obj << /Length 640 >> stream
+INVOICE
+Type: FINAL
+Invoice #: f45e813f-d6f7-4bbe-9efd-927d8969eba7
+Order ID: 99f6f5fa-65b1-454e-b27c-c786aaadf52d
+Issued: 2026-02-16T00:57:28.228Z
+
+Business:
+We You Laundry
+Demo Address
++91-9000000000
+Note: Thank you!
+
+Customer:
+Karthik Burra
++919999999999
+
+Items:
+  Shirt x 20 @ 50.00 = 1000.00
+  Wash and fold x 12 @ 30.00 = 360.00
+  Discount: -100.00
+
+Subtotal: 1360.00
+Tax: 136.00
+Total: 1396.00
+
+          Demo Address | vudev2025@gmail.com | +91-9000000000
+       It's a computer generated invoice, Signature not required.
+
+UPI ID: merchant@upi
+Pay to: Laundry Demo
+QR code available at: /api/assets/branding/1771136133375-images.png
+endstream endobj
+xref
+0 5
+0000000000 65535 f 
+         9 00000 n 
+        58 00000 n 
+       115 00000 n 
+       202 00000 n 
+trailer << /Size 5 /Root 1 0 R >>
+startxref
+893
+%%EOF

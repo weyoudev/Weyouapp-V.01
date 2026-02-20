@@ -1,0 +1,15 @@
+-- Order: per-status timestamp columns
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "confirmedAt" TIMESTAMP(3);
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "pickedUpAt" TIMESTAMP(3);
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "inProgressAt" TIMESTAMP(3);
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "readyAt" TIMESTAMP(3);
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "outForDeliveryAt" TIMESTAMP(3);
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "deliveredAt" TIMESTAMP(3);
+
+-- Invoice: subscription and payment fields
+ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "subscriptionUtilized" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "subscriptionId" TEXT;
+ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "subscriptionUsageKg" DECIMAL(10,2);
+ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "subscriptionUsageItems" INTEGER;
+ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "paymentStatus" TEXT NOT NULL DEFAULT 'DUE';
+ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "paymentOverrideReason" TEXT;

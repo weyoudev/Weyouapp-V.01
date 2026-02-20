@@ -1,0 +1,46 @@
+%PDF-1.1
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >> endobj
+4 0 obj << /Length 572 >> stream
+INVOICE
+Type: FINAL
+Invoice #: 1d1bf7f8-7c8e-46fe-8b72-1bed721856d0
+Order ID: 3e69dcde-9eeb-405f-ac12-f9b708a9d2b4
+Issued: 2026-02-14T01:56:21.600Z
+
+Business:
+WeYou Laundry
+Demo Address
++91-9000000000
+Note: Thank you!
+
+Customer:
+Rama Krishna
++919848188877
+
+Items:
+  Addons x 1 @ 50.00 = 50.00
+
+Subtotal: 50.00
+Tax: 0.00
+Total: 50.00
+
+                     Demo Address | +91-9000000000
+       It's a computer generated invoice, Signature not required.
+
+UPI ID: mahaenterprises@upi
+Pay to: Maha enterprises
+QR code available at: /api/assets/branding/1770969602940-images.png
+endstream endobj
+xref
+0 5
+0000000000 65535 f 
+         9 00000 n 
+        58 00000 n 
+       115 00000 n 
+       202 00000 n 
+trailer << /Size 5 /Root 1 0 R >>
+startxref
+825
+%%EOF

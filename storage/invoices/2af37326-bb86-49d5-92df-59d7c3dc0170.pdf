@@ -1,0 +1,45 @@
+%PDF-1.1
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >> endobj
+4 0 obj << /Length 540 >> stream
+INVOICE
+Type: ACKNOWLEDGEMENT
+Invoice #: 2af37326-bb86-49d5-92df-59d7c3dc0170
+Order ID: 6655830f-7873-4eba-a642-1942ad8b489f
+Issued: 2026-02-14T15:57:30.325Z
+
+Business:
+We you laundry
+Demo Address
++91-9000000000
+Note: Thank you!
+
+Customer:
+1
++919999999999
+
+Items:
+
+Subtotal: 0.00
+Tax: 0.00
+Total: 0.00
+
+         Demo Address | Weyoudev2026@gmail.com | +91-9000000000
+       It's a computer generated invoice, Signature not required.
+
+UPI ID: Weyou@upi
+Pay to: Laundry Demo
+QR code available at: /api/assets/branding/1771044189879-images.png
+endstream endobj
+xref
+0 5
+0000000000 65535 f 
+         9 00000 n 
+        58 00000 n 
+       115 00000 n 
+       202 00000 n 
+trailer << /Size 5 /Root 1 0 R >>
+startxref
+793
+%%EOF

@@ -1,0 +1,46 @@
+%PDF-1.1
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >> endobj
+4 0 obj << /Length 539 >> stream
+INVOICE
+Type: FINAL
+Invoice #: 3b9726ca-ee5e-4844-b882-42d7c9764d68
+Order ID: b5679405-d7ba-4127-971d-2de6fffcb530
+Issued: 2026-02-13T14:38:16.099Z
+
+Business:
+WeYou Laundry
+Demo Address
++91-9000000000
+Note: Thank you!
+
+Customer:
+Karthik
++919999999999
+
+Items:
+  Wash & Fold x 12 @ 250.00 = 3000.00
+  Jeans x 15 @ 6.00 = 90.00
+  Addons x 1 @ 50.00 = 50.00
+  Discount: -628.00
+
+Subtotal: 3140.00
+Tax: 0.00
+Total: 2512.00
+
+UPI ID: mahaenterprises@upi
+Pay to: Maha enterprises
+QR code available at: /api/assets/branding/1770969602940-images.png
+endstream endobj
+xref
+0 5
+0000000000 65535 f 
+         9 00000 n 
+        58 00000 n 
+       115 00000 n 
+       202 00000 n 
+trailer << /Size 5 /Root 1 0 R >>
+startxref
+792
+%%EOF

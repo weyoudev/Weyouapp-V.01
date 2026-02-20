@@ -1,0 +1,66 @@
+/**
+ * Typed application errors. Used by use-cases; API layer maps to HTTP status + code/message.
+ */
+export type AppErrorCode =
+  | 'MIN_KG_NOT_MET'
+  | 'SUBSCRIPTION_EXPIRED'
+  | 'NO_REMAINING_PICKUPS'
+  | 'EXCEEDED_LIMIT'
+  | 'INVALID_STATUS_TRANSITION'
+  | 'UNIQUE_CONSTRAINT'
+  | 'PINCODE_NOT_SERVICEABLE'
+  | 'SLOT_NOT_AVAILABLE'
+  | 'SLOT_FULL'
+  | 'SLOT_IN_THE_PAST'
+  | 'SUBSCRIPTION_REQUIRED'
+  | 'SUBSCRIPTION_NOT_OWNED'
+  | 'SUBSCRIPTION_HAS_ACTIVE_ORDER'
+  | 'INDIVIDUAL_NO_SUBSCRIPTION'
+  | 'SERVICES_REQUIRED'
+  | 'ADDRESS_NOT_FOUND'
+  | 'ADDRESS_NOT_OWNED'
+  | 'ACK_INVOICE_NOT_ALLOWED'
+  | 'FINAL_INVOICE_NOT_ALLOWED'
+  | 'BRANDING_NOT_FOUND'
+  | 'ASSET_NOT_FOUND'
+  | 'ITEM_NOT_FOUND'
+  | 'PLAN_NOT_FOUND'
+  | 'ACTIVE_SUBSCRIPTION_SAME_PLAN'
+  | 'CUSTOMER_NOT_FOUND'
+  | 'INVOICE_NOT_FOUND'
+  | 'INVOICE_ACCESS_DENIED'
+  | 'PAYMENT_INVALID'
+  | 'ANALYTICS_INVALID_RANGE'
+  | 'ORDER_NOT_FOUND'
+  | 'ORDER_ACCESS_DENIED'
+  | 'FEEDBACK_ALREADY_EXISTS'
+  | 'FEEDBACK_NOT_ALLOWED'
+  | 'FEEDBACK_NOT_FOUND'
+  | 'FEEDBACK_ACCESS_DENIED'
+  | 'FEEDBACK_INVALID'
+  | 'USER_DISABLED'
+  | 'CANNOT_DISABLE_SELF'
+  | 'CANNOT_DELETE_PROTECTED'
+  | 'INVALID_CODE'
+  | 'SERVICE_CATEGORY_EXISTS'
+  | 'SEGMENT_CATEGORY_EXISTS'
+  | 'PINCODE_ALREADY_IN_OTHER_BRANCH'
+  | 'NOT_FOUND'
+  | 'DESCRIPTION_TOO_LONG'
+  | 'SUBSCRIPTION_PLAN_ALREADY_REDEEMED';
+
+export class AppError extends Error {
+  constructor(
+    public readonly code: AppErrorCode,
+    message: string,
+    public readonly details?: unknown,
+  ) {
+    super(message);
+    this.name = 'AppError';
+    Object.setPrototypeOf(this, AppError.prototype);
+  }
+}
+
+export function isAppError(e: unknown): e is AppError {
+  return e instanceof AppError;
+}

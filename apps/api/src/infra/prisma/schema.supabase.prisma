@@ -1,0 +1,14 @@
+// ---------------------------------------------------------------------------
+// INTROSPECTION-ONLY: Use this file for `prisma db pull`, NOT the app schema.
+// App schema (source of truth): apps/api/src/infra/prisma/schema.prisma
+// Command: npx prisma db pull --schema=apps/api/src/infra/prisma/schema.supabase.prisma
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
