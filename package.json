@@ -15,7 +15,7 @@
     "dev:api:3008": "cross-env PORT=3008 npx ts-node-dev -r tsconfig-paths/register --project apps/api/tsconfig.json --respawn --transpile-only apps/api/src/bootstrap/main.ts",
     "dev:api:3009": "cross-env PORT=3009 npx ts-node-dev -r tsconfig-paths/register --project apps/api/tsconfig.json --respawn --transpile-only apps/api/src/bootstrap/main.ts",
     "build:api": "tsc -p apps/api/tsconfig.build.json && node -e \"const fs=require('fs'); const path=require('path'); const src=path.join('apps/api/src/infra/generated'); const dest=path.join('apps/api/dist/apps/api/src/infra/generated'); fs.mkdirSync(path.dirname(dest), {recursive: true}); fs.cpSync(src, dest, {recursive: true});\"",
-    "start:api": "node -r tsconfig-paths/register apps/api/dist/apps/api/src/bootstrap/main.js",
+    "start:api": "cd apps/api && node -r tsconfig-paths/register dist/apps/api/src/bootstrap/main.js",
     "docker:build:api": "docker build -f apps/api/Dockerfile -t weyou-api:latest .",
     "test": "jest",
     "lint": "eslint . --ext .ts",
