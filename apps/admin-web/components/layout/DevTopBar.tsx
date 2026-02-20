@@ -57,11 +57,11 @@ export function DevTopBar() {
           <StatusDot status={auth} />
           <StatusDot status={db} />
           {checking && <span className="text-muted-foreground">…</span>}
-          {lastError && (
-            <span className="max-w-[200px] truncate text-amber-700 dark:text-amber-400" title={lastError}>
-              {lastError}
+          {lastError ? (
+            <span className="max-w-[200px] truncate text-amber-700 dark:text-amber-400" title={String(lastError)}>
+              {String(lastError)}
             </span>
-          )}
+          ) : null}
           <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={refresh} disabled={checking}>
             <RefreshCw className={cn('h-3 w-3', checking && 'animate-spin')} />
           </Button>

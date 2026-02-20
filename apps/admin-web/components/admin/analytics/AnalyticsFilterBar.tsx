@@ -94,9 +94,9 @@ export function AnalyticsFilterBar({
                 className={dateRangeError ? 'border-destructive' : ''}
               />
             </div>
-            {dateRangeError && (
+            {dateRangeError ? (
               <p className="text-sm text-destructive self-center">{dateRangeError}</p>
-            )}
+            ) : null}
             <Button
               size="sm"
               onClick={onApplyCustomRange}

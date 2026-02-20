@@ -360,11 +360,11 @@ export default function SchedulePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {hoursError && (
+            {hoursError ? (
               <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 mb-4">
                 <ErrorDisplay error={hoursError} />
               </div>
-            )}
+            ) : null}
             {hoursLoading ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
@@ -453,14 +453,14 @@ export default function SchedulePage() {
               </Button>
             </form>
           )}
-          {holidaysError && (
+          {holidaysError ? (
             <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3">
               <ErrorDisplay error={holidaysError} />
               <p className="mt-2 text-xs text-muted-foreground">
                 If the error mentions a missing table or relation, run the database migration from the api app: <code className="rounded bg-muted px-1">npx prisma migrate deploy --schema=src/infra/prisma/schema.prisma</code>
               </p>
             </div>
-          )}
+          ) : null}
           {holidaysLoading ? (
             <p className="text-sm text-muted-foreground">Loading holidays…</p>
           ) : holidays.length === 0 ? (
