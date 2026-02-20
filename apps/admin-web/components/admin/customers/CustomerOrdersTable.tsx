@@ -256,11 +256,11 @@ export function CustomerOrdersTable({ userId, role, userBranchId }: CustomerOrde
         </div>
       </CardHeader>
       <CardContent>
-        {error && (
+        {error ? (
           <p className="text-sm text-destructive mb-4">
             Failed to load orders: {(error as Error).message}
           </p>
-        )}
+        ) : null}
         {isLoading ? (
           <div className="space-y-2">
             {[1, 2, 3, 4].map((i) => (

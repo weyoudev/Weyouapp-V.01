@@ -157,9 +157,9 @@ export default function FeedbackPage() {
           <CardTitle>List</CardTitle>
         </CardHeader>
         <CardContent>
-          {error && (
+          {error ? (
             <p className="text-destructive">{(error as Error).message}</p>
-          )}
+          ) : null}
           {isLoading && <Skeleton className="h-48 w-full" />}
           {!isLoading && data && (
             <>

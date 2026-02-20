@@ -67,11 +67,11 @@ export function CustomerPaymentsTable({ userId, role, userBranchId }: CustomerPa
         </div>
       </CardHeader>
       <CardContent>
-        {error && (
+        {error ? (
           <p className="text-sm text-destructive mb-4">
             Failed to load payments: {(error as Error).message}
           </p>
-        )}
+        ) : null}
         {isLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => (

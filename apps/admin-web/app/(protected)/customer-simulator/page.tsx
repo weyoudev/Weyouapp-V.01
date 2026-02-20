@@ -1184,14 +1184,14 @@ export default function CustomerSimulatorPage() {
                   {loading ? 'Creating…' : 'Confirm order'}
                 </Button>
                 <p className="text-xs text-muted-foreground">Order will appear in Admin → Orders list.</p>
-                {error && (
+                {error ? (
                   <div>
                     <ErrorDisplay error={error} />
                     <p className="mt-2 text-xs text-muted-foreground">
                       If you see &quot;No slot available&quot;, set operating hours in Admin → Schedule &amp; calendar. Past slots are rejected by the server.
                     </p>
                   </div>
-                )}
+                ) : null}
               </form>
             ) : (
               <p className="text-sm text-destructive">No address. Add an address in step 2b or use Fetch /me if you have a default.</p>
