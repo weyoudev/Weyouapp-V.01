@@ -442,7 +442,7 @@ export function CustomerOrdersTable({ userId, role, userBranchId }: CustomerOrde
                 ref={invoicePrintRef}
                 summary={orderSummary}
                 invoice={invoice}
-                type={invoiceModal.type}
+                type={invoiceModal!.type}
                 branding={(() => {
                   const snap = invoice?.brandingSnapshotJson;
                   const base = (snap ?? branding) ?? null;
@@ -451,7 +451,7 @@ export function CustomerOrdersTable({ userId, role, userBranchId }: CustomerOrde
                   const terms = (snapTerms?.trim() ? snapTerms : branding?.termsAndConditions) ?? null;
                   return { ...base, termsAndConditions: terms };
                 })()}
-                ackInvoice={invoiceModal.type === 'FINAL' ? ackInvoice ?? null : undefined}
+                ackInvoice={invoiceModal!.type === 'FINAL' ? ackInvoice ?? null : undefined}
                 catalogMatrix={catalogMatrix ?? null}
                 subscriptionUnit={subscriptionUnit}
                 subscriptionUsageRowIndex={subscriptionUsageRowIndex}
