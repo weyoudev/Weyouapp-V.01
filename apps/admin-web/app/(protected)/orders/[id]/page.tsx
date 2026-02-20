@@ -190,9 +190,9 @@ export default function OrderDetailPage() {
             quantity: i.quantity,
             unitPricePaise: i.unitPrice,
             amountPaise: i.amount,
-            catalogItemId: i.catalogItemId,
-            segmentCategoryId: i.segmentCategoryId,
-            serviceCategoryId: i.serviceCategoryId,
+            catalogItemId: i.catalogItemId ?? undefined,
+            segmentCategoryId: i.segmentCategoryId ?? undefined,
+            serviceCategoryId: i.serviceCategoryId ?? undefined,
           })),
         );
       }
