@@ -1,13 +1,37 @@
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
 const apiBase = () => (API_BASE ? `${API_BASE.replace(/\/$/, '')}/api` : '');
 
+const CONNECTION_TEST_TIMEOUT_MS = 60000; // Render cold start can take 30–60s
+
 /** Call before login to verify the app can reach the API. Throws with a clear message if not. */
 export async function testConnection(): Promise<void> {
   const base = apiBase();
   if (!base) throw new Error('EXPO_PUBLIC_API_URL is not set in .env. Restart Expo after adding it.');
   const rootUrl = base.replace(/\/api$/, '');
-  const res = await fetch(`${rootUrl}/api`, { method: 'GET' });
-  if (!res.ok) throw new Error(`Server returned ${res.status}. API may be starting.`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TEST_TIMEOUT_MS);
+  try {
+    // Try GET /api first (our route); if 404, try GET / (root) in case deploy has only one
+    let res = await fetch(`${rootUrl}/api`, { method: 'GET', signal: controller.signal });
+    if (res.status === 404) {
+      res = await fetch(`${rootUrl}/`, { method: 'GET', signal: controller.signal });
+    }
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      const msg = res.status >= 502 && res.status <= 504
+        ? 'Server is starting or busy (Render may take up to a minute). Please try again.'
+        : res.status === 404
+          ? 'API returned 404. Redeploy the API on Render from the latest code (Dashboard → weyou-api → Manual Deploy).'
+          : `Server returned ${res.status}. Check that the API is deployed and running.`;
+      throw new Error(msg);
+    }
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Connection timed out. If using Render, the server may be starting (wait up to 1 minute and try again).');
+    }
+    throw err;
+  }
 }
 
 /** Public branding for welcome screen and login T&C/Privacy. No auth. */
@@ -91,6 +115,12 @@ export interface VerifyOtpResponse {
 const REQUEST_TIMEOUT_MS = 15000;
 
 async function parseErrorResponse(res: Response): Promise<string> {
+  if (res.status >= 502 && res.status <= 504) {
+    return 'Server is starting or busy. If using Render, wait a moment and try again.';
+  }
+  if (res.status === 404) {
+    return 'Request failed (404). The API may need to be redeployed.';
+  }
   try {
     const data = (await res.json()) as { message?: string };
     return data.message ?? res.statusText ?? `Request failed (${res.status})`;
