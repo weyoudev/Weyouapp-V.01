@@ -232,7 +232,7 @@ export default function NewWalkInOrderPage() {
           {customerId && (
             <div className="rounded-md border bg-muted/50 p-3">
               <p className="font-medium">Customer created</p>
-              <p className="text-sm">Name: {name || '—'}, Phone: {phone}</p>
+              <p className="text-sm">Name: {name || '—'}, Phone: {combinedPhone || '—'}</p>
             </div>
           )}
             </>
