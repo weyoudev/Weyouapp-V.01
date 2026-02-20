@@ -5,7 +5,8 @@ const apiBase = () => (API_BASE ? `${API_BASE.replace(/\/$/, '')}/api` : '');
 export async function testConnection(): Promise<void> {
   const base = apiBase();
   if (!base) throw new Error('EXPO_PUBLIC_API_URL is not set in .env. Restart Expo after adding it.');
-  const res = await fetch(`${base.replace(/\/api$/, '')}/api`, { method: 'GET' });
+  const rootUrl = base.replace(/\/api$/, '');
+  const res = await fetch(`${rootUrl}/api`, { method: 'GET' });
   if (!res.ok) throw new Error(`Server returned ${res.status}. API may be starting.`);
 }
 
@@ -102,7 +103,7 @@ export async function requestOtp(phone: string): Promise<{ requestId: string }> 
   const base = apiBase();
   if (!base) {
     throw new Error(
-      'API URL not set. Add EXPO_PUBLIC_API_URL in apps/customer-mobile/.env (e.g. http://YOUR_PC_IP:3006), then restart Expo.'
+      'API URL not set. Add EXPO_PUBLIC_API_URL in .env (e.g. https://weyou-api.onrender.com for anywhere, or http://YOUR_PC_IP:3006 for local), then restart Expo.'
     );
   }
   const controller = new AbortController();
@@ -125,12 +126,12 @@ export async function requestOtp(phone: string): Promise<{ requestId: string }> 
     if (err instanceof Error) {
       if (err.name === 'AbortError') {
         throw new Error(
-          'Request timed out. Check: 1) API running (npm run dev:api:3006) 2) EXPO_PUBLIC_API_URL in .env = http://YOUR_PC_IP:3006 3) Phone on same WiFi. Restart Expo after .env change.'
+          'Request timed out. Check: 1) API running (or use https://weyou-api.onrender.com in .env) 2) EXPO_PUBLIC_API_URL correct 3) Network. Restart Expo after .env change.'
         );
       }
       if (err.message === 'Network request failed' || err.message.includes('Network')) {
         throw new Error(
-          'Cannot reach server. In .env set EXPO_PUBLIC_API_URL=http://YOUR_PC_IP:3006 (run ipconfig for IP). Same WiFi, API running. Restart Expo.'
+          'Cannot reach server. In .env set EXPO_PUBLIC_API_URL (e.g. https://weyou-api.onrender.com for anywhere). Restart Expo.'
         );
       }
     }
@@ -221,11 +222,23 @@ export interface MeResponse {
 export async function getMe(token: string): Promise<MeResponse> {
   const base = apiBase();
   if (!base) throw new Error('API URL not configured');
-  const res = await fetch(`${base}/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error('Failed to load profile');
-  return res.json() as Promise<MeResponse>;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${base}/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error('Failed to load profile');
+    return res.json() as Promise<MeResponse>;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Request timed out. Check network and try again.');
+    }
+    throw err;
+  }
 }
 
 export async function updateMe(
@@ -668,7 +681,9 @@ export async function fetchInvoicePdfBase64(invoiceId: string, token: string): P
   });
   if (!res.ok) throw new Error('Failed to load invoice');
   const arrayBuffer = await res.arrayBuffer();
-  const { encode: encodeBase64 } = await import('base64-arraybuffer');
+  const base64Module = await import('base64-arraybuffer').catch(() => null);
+  const encodeBase64 = base64Module?.encode;
+  if (typeof encodeBase64 !== 'function') throw new Error('Failed to load PDF encoder');
   return encodeBase64(arrayBuffer);
 }
 

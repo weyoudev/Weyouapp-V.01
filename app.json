@@ -7,6 +7,12 @@
     },
     "android": {
       "package": "com.weyouapp.weyouapp"
+    },
+    "ios": {
+      "bundleIdentifier": "y",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     }
   }
 }

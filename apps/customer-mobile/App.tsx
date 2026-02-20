@@ -22,10 +22,11 @@ import { WebView } from 'react-native-webview';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import * as DateTimePickerModule from '@react-native-community/datetimepicker';
+const DateTimePicker = DateTimePickerModule?.default ?? DateTimePickerModule;
 import {
   checkServiceability,
   submitAreaRequest,
@@ -313,17 +314,27 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const Notifications = await import('expo-notifications');
-        const Device = await import('expo-device');
-        if (!Device.default.isDevice) return;
-        const { status: existing } = await Notifications.getPermissionsAsync();
+        const DeviceModule = await import('expo-device').catch(() => null);
+        const NotificationsModule = await import('expo-notifications').catch(() => null);
+        if (!DeviceModule || !NotificationsModule) return;
+        const Device = DeviceModule.default ?? DeviceModule;
+        const Notifications = NotificationsModule.default ?? NotificationsModule;
+        if (!Device?.isDevice) return;
+        const getPerms = Notifications?.getPermissionsAsync;
+        if (typeof getPerms !== 'function') return;
+        const { status: existing } = await getPerms.call(Notifications);
         let final = existing;
         if (existing !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync();
-          final = status;
+          const requestPerms = Notifications?.requestPermissionsAsync;
+          if (typeof requestPerms === 'function') {
+            const { status } = await requestPerms.call(Notifications);
+            final = status;
+          }
         }
         if (final !== 'granted' || cancelled) return;
-        const tokenData = await Notifications.getExpoPushTokenAsync();
+        const getToken = Notifications?.getExpoPushTokenAsync;
+        if (typeof getToken !== 'function') return;
+        const tokenData = await getToken.call(Notifications);
         const pushToken = tokenData?.data;
         if (pushToken && !cancelled) await registerPushToken(token, pushToken);
       } catch (_) {
@@ -533,16 +544,28 @@ export default function App() {
     return () => { cancelled = true; };
   }, [plansAddressId, savedAddresses]);
 
+  const INIT_TIMEOUT_MS = 12000; // Show welcome screen if token/API check hangs
   useEffect(() => {
+    let cancelled = false;
+    const timeoutId = setTimeout(() => {
+      if (cancelled) return;
+      setInitializing(false);
+      setStep('phone');
+      setError('Could not reach the server. Check API URL and network, then tap Retry.');
+    }, INIT_TIMEOUT_MS);
     (async () => {
       try {
         const storedToken = await getStoredToken();
+        if (cancelled) return;
         if (!storedToken) {
+          clearTimeout(timeoutId);
           setStep('phone');
           setInitializing(false);
           return;
         }
         const me = await getMe(storedToken);
+        if (cancelled) return;
+        clearTimeout(timeoutId);
         setToken(storedToken);
         setName(me.user.name ?? '');
         setEmail(me.user.email ?? '');
@@ -553,6 +576,8 @@ export default function App() {
           setStep('profile');
         }
       } catch (err) {
+        if (cancelled) return;
+        clearTimeout(timeoutId);
         const isNetworkError =
           (err instanceof TypeError && (err.message === 'Network request failed' || err.message?.includes('fetch'))) ||
           (err instanceof Error && (err.message === 'Network request failed' || err.message?.includes('Network')));
@@ -566,9 +591,13 @@ export default function App() {
           setError(err instanceof Error ? err.message : 'Something went wrong');
         }
       } finally {
-        setInitializing(false);
+        if (!cancelled) setInitializing(false);
       }
     })();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const validatePhone = (combined: string): string | null => {
@@ -2219,8 +2248,10 @@ export default function App() {
                             style={[styles.invoiceCta, styles.invoiceCtaDownload]}
                             onPress={async () => {
                               try {
-                                const Print = await import('expo-print');
-                                await Print.printAsync({ uri: subscriptionInvoicePreviewUri });
+                                const PrintModule = await import('expo-print').catch(() => null);
+                                const Print = PrintModule && (PrintModule.default ?? PrintModule);
+                                if (Print?.printAsync) await Print.printAsync({ uri: subscriptionInvoicePreviewUri });
+                                else setSubscriptionInvoiceError('Print is not available.');
                               } catch (e) {
                                 setSubscriptionInvoiceError((e as Error).message);
                               }

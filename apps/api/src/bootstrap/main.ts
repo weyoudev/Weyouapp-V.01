@@ -19,13 +19,18 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
-  // Root path: point to API base so GET / doesn't 404
-  app.getHttpAdapter().get('/', (_req, res) => {
-    res.status(200).json({
-      message: 'Weyou API',
-      api: '/api',
-      docs: 'Use /api as the base path for all endpoints (e.g. /api/auth/customer/otp/request)',
-    });
+  const adapter = app.getHttpAdapter();
+  // Root path: GET / and GET /api so mobile connection test and health checks don't 404
+  const rootPayload = {
+    message: 'Weyou API',
+    api: '/api',
+    docs: 'Use /api as the base path for all endpoints (e.g. /api/auth/customer/otp/request)',
+  };
+  adapter.get('/', (_req: unknown, res: { status: (n: number) => { json: (o: object) => void } }) => {
+    res.status(200).json(rootPayload);
+  });
+  adapter.get('/api', (_req: unknown, res: { status: (n: number) => { json: (o: object) => void } }) => {
+    res.status(200).json(rootPayload);
   });
 
   app.useGlobalPipes(

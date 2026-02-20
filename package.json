@@ -7,6 +7,10 @@
     "apps/*",
     "packages/*"
   ],
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
   "scripts": {
     "dev:api": "npx ts-node-dev -r tsconfig-paths/register --project apps/api/tsconfig.json --respawn --transpile-only apps/api/src/bootstrap/main.ts",
     "dev:api:3003": "cross-env PORT=3003 npx ts-node-dev -r tsconfig-paths/register --project apps/api/tsconfig.json --respawn --transpile-only apps/api/src/bootstrap/main.ts",
@@ -33,7 +37,8 @@
     "smoke-admin": "ts-node scripts/smoke-admin-flow.ts",
     "dev:admin": "npm run dev -w admin-web",
     "dev:customer": "npm run dev -w customer-web",
-    "dev:customer-mobile": "npm run start -w customer-mobile"
+    "dev:customer-mobile": "cd apps/customer-mobile && npx expo start",
+    "dev:customer-mobile:clear": "cd apps/customer-mobile && npx expo start -c"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
@@ -56,6 +61,8 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
