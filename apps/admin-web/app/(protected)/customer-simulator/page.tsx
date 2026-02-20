@@ -458,16 +458,17 @@ export default function CustomerSimulatorPage() {
       const token = verifyData.token as string;
       setCustomerToken(token);
       const meRes = await apiWithToken<typeof me>('GET', '/me', token);
-      if (meRes.ok) {
-        setMe(meRes.data);
+      if (meRes.ok && meRes.data) {
+        const data = meRes.data;
+        setMe(data);
         const needsOnboarding =
-          !meRes.data.user.name?.trim() ||
-          !meRes.data.user.email?.trim() ||
-          !meRes.data.defaultAddress;
-        setStep(needsOnboarding ? 'onboarding' : (meRes.data.defaultAddress ? 'form' : 'address'));
+          !data.user.name?.trim() ||
+          !data.user.email?.trim() ||
+          !data.defaultAddress;
+        setStep(needsOnboarding ? 'onboarding' : (data.defaultAddress ? 'form' : 'address'));
         if (needsOnboarding) {
-          setOnboardingName(meRes.data.user.name ?? '');
-          setOnboardingEmail(meRes.data.user.email ?? '');
+          setOnboardingName(data.user.name ?? '');
+          setOnboardingEmail(data.user.email ?? '');
           toast.success('Please complete your profile');
         } else {
           toast.success('Customer logged in');
