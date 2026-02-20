@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { Role } from '@shared/enums';
+import type { Role } from '@/lib/auth';
 import {
   fetchAdminUsers,
   deleteAdminUser,

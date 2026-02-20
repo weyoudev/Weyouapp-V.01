@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { Role } from '@shared/enums';
+import type { Role } from '@/lib/auth';
 
 export interface AdminUser {
   id: string;
