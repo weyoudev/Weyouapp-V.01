@@ -4,7 +4,7 @@
     "declaration": true,
     "sourceMap": true,
     "outDir": "dist",
-    "rootDir": "../.."
+    "rootDir": "../..",
     "baseUrl": ".",
     "types": ["node"],
     "paths": {
@@ -22,6 +22,8 @@
     "**/*.test.ts",
     "**/__tests__/**",
     "test",
-    "test/**"
+    "test/**",
+    "node_modules",
+    "dist"
   ]
 }
