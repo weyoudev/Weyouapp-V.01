@@ -10,8 +10,7 @@ const path = require('path');
 const isAdminOnly = process.env.VERCEL_ADMIN_ONLY === '1' || process.env.VERCEL_ADMIN_ONLY === 'true';
 
 if (isAdminOnly) {
-  execSync('npm run build -w admin-web', { stdio: 'inherit', cwd: path.resolve(__dirname, '..') });
+  execSync('npm run build:admin', { stdio: 'inherit', cwd: path.resolve(__dirname, '..') });
 } else {
-  execSync('npm run prisma:generate && npm run build:api', { stdio: 'inherit', cwd: path.resolve(__dirname, '..') });
-  execSync('node scripts/vercel-build-admin.js', { stdio: 'inherit', cwd: path.resolve(__dirname, '..') });
+  execSync('npm run vercel-build', { stdio: 'inherit', cwd: path.resolve(__dirname, '..') });
 }

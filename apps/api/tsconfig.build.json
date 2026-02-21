@@ -1,1 +1,27 @@
-{"extends":"./tsconfig.json","compilerOptions":{"declaration":true,"sourceMap":true,"rootDir":"../.."},"include":["src/**/*.ts","../../packages/shared/src/**/*.ts"],"exclude":["test","test/**","**/*.spec.ts","**/__tests__/**","src/application/__tests__"]}
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "../.."
+    "baseUrl": ".",
+    "types": ["node"],
+    "paths": {
+      "@shared/*": ["../../packages/shared/src/*"],
+      "@prisma/client": ["src/infra/generated/prisma-client"],
+      "@prisma/client/*": ["src/infra/generated/prisma-client/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "../../packages/shared/src/**/*.ts"
+  ],
+  "exclude": [
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "**/__tests__/**",
+    "test",
+    "test/**"
+  ]
+}
