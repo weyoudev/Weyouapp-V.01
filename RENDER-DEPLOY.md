@@ -14,7 +14,7 @@ If the mobile app shows **"Request failed (404). The API may need to be redeploy
 2. **In Render Dashboard**
    - Open [dashboard.render.com](https://dashboard.render.com)
    - Open the **weyou-api** service
-   - If it didn’t auto-deploy: click **Manual Deploy** → **Deploy latest commit**
+   - If it didn’t auto-deploy: click **Manual Deploy** → **Clear build cache & deploy**
    - Wait until the deploy status is **Live** (and the build log shows no errors)
 
 3. **Check that the API responds**
@@ -55,4 +55,4 @@ If the admin at **https://weyou-admin.onrender.com** shows "Failed to load analy
 
 After this, the admin will call the Render API and show the updated error messages.
 
-**Network Error fix (same-origin proxy):** The admin app now proxies API requests through its own origin when running at `weyou-admin.onrender.com`. So the browser talks only to `weyou-admin.onrender.com` (e.g. `/api-proxy/...`), and the Next.js server forwards those requests to `weyou-api.onrender.com`. That avoids CORS and connection issues. After deploying the latest code (with the proxy), set `NEXT_PUBLIC_API_URL` as above, clear build cache, redeploy, then hard refresh. If the API is cold, wait 30–60s and refresh again.
+**Network Error fix (same-origin proxy):** The admin app proxies API requests via a Route Handler (`/api-proxy/...`) when the app is on Render and the API URL is on Render. The browser only talks to the admin origin; the server forwards requests (including `Authorization`) to the API. Set `NEXT_PUBLIC_API_URL` as above. If the hostname check fails (e.g. custom domain), add **`NEXT_PUBLIC_USE_API_PROXY`** = **`true`** to the admin service env. Clear build cache, redeploy, then hard refresh. If the API is cold, wait 30–60s and refresh again.

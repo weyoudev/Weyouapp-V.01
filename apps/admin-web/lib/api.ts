@@ -6,9 +6,13 @@ export const API_BASE_URL =
 
 /** When admin is deployed on Render, use same-origin proxy to avoid CORS/network errors. */
 export function getBaseURL(): string {
-  if (typeof window !== 'undefined' && window.location.origin.includes('weyou-admin.onrender.com')) {
-    return '/api-proxy';
-  }
+  if (typeof window === 'undefined') return API_BASE_URL;
+  // Force proxy via env (set on Render admin service)
+  if (process.env.NEXT_PUBLIC_USE_API_PROXY === 'true') return '/api-proxy';
+  // Use proxy when this app is on Render and the API URL is also on Render
+  const onRender = window.location.hostname.endsWith('.onrender.com');
+  const apiOnRender = API_BASE_URL.includes('onrender.com');
+  if (onRender && apiOnRender) return '/api-proxy';
   return API_BASE_URL;
 }
 
