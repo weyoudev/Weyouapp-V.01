@@ -79,7 +79,8 @@ export async function createApp(): Promise<INestApplication> {
   adapter.get('/api/admin/analytics/dashboard-kpis', async (req: unknown, res: { status: (n: number) => { json: (o: object) => void } }) => {
     const auth = checkAuth(req as { headers?: { authorization?: string } });
     if (!auth.ok) {
-      res.status(auth.status).json(auth.body);
+      const { status, body } = auth;
+      res.status(status).json(body);
       return;
     }
     let service: AdminAnalyticsService;
@@ -100,7 +101,8 @@ export async function createApp(): Promise<INestApplication> {
   adapter.get('/api/admin/analytics/revenue', async (req: { query?: Record<string, unknown> } & unknown, res: { status: (n: number) => { json: (o: object) => void } }) => {
     const auth = checkAuth(req as { headers?: { authorization?: string } });
     if (!auth.ok) {
-      res.status(auth.status).json(auth.body);
+      const { status, body } = auth;
+      res.status(status).json(body);
       return;
     }
     let service: AdminAnalyticsService;

@@ -1,5 +1,6 @@
 import {
   type PrismaClient,
+  type Prisma,
   InvoiceStatus as PrismaInvoiceStatus,
   InvoiceType as PrismaInvoiceType,
 } from '@prisma/client';
@@ -200,9 +201,9 @@ export class PrismaInvoicesRepo implements InvoicesRepo {
         discountPaise: 0,
         paymentStatus: input.totalPaise > 0 ? 'DUE' : 'PAID',
         code: input.code ?? null,
-        brandingSnapshotJson: input.brandingSnapshotJson ?? undefined,
+        brandingSnapshotJson: (input.brandingSnapshotJson ?? undefined) as Prisma.InputJsonValue | undefined,
         subscriptionPurchaseSnapshotJson: input.subscriptionPurchaseSnapshot
-          ? (input.subscriptionPurchaseSnapshot as object)
+          ? (input.subscriptionPurchaseSnapshot as unknown as Prisma.InputJsonValue)
           : undefined,
         items: {
           create: [

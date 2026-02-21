@@ -1,10 +1,1 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "declaration": true,
-    "sourceMap": true,
-    "rootDir": "../.."
-  },
-  "include": ["src/**/*.ts", "../../packages/shared/src/**/*.ts"],
-  "exclude": ["test", "**/*.spec.ts"]
-}
+{"extends":"./tsconfig.json","compilerOptions":{"declaration":true,"sourceMap":true,"rootDir":"../.."},"include":["src/**/*.ts","../../packages/shared/src/**/*.ts"],"exclude":["test","**/*.spec.ts","**/__tests__/**"]}
