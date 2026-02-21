@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "cross-env NEXT_IGNORE_INCORRECT_LOCKFILE=true next dev -p 3004",
+    "dev:fresh": "node -e \"try { require('fs').rmSync('.next', { recursive: true }); } catch (_) {}\" && npm run dev",
     "build": "next build",
     "start": "next start -p 3004",
     "lint": "next lint"
