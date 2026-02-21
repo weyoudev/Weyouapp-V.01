@@ -25,7 +25,7 @@ export async function createApp(): Promise<INestApplication> {
 
   const allowedOrigins = [
     'https://weyou-admin.onrender.com',
-    /^https:\/\/weyou-admin.*\.vercel\.app$/,
+    /^https:\/\/.*\.vercel\.app$/,
     /^http:\/\/localhost(:\d+)?$/,
     /^http:\/\/127\.0\.0\.1(:\d+)?$/,
   ];

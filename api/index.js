@@ -24,10 +24,19 @@ const handler = handlerModule.default || handlerModule;
 
 // Vercel rewrite sends /api/* to /api/index/:path — restore path so Nest sees /api/...
 const INDEX_PREFIX = '/api/index';
-module.exports = function (req, res) {
+function runHandler(req, res) {
   if (req.url && req.url.startsWith(INDEX_PREFIX)) {
     const rest = req.url.slice(INDEX_PREFIX.length);
     req.url = '/api' + (rest.startsWith('/') ? rest : rest || '');
   }
   return handler(req, res);
-};
+}
+
+// Export for all methods so Vercel routes GET, POST, PUT, PATCH, DELETE, OPTIONS to this function
+module.exports = runHandler;
+module.exports.get = runHandler;
+module.exports.post = runHandler;
+module.exports.put = runHandler;
+module.exports.patch = runHandler;
+module.exports.delete = runHandler;
+module.exports.options = runHandler;
