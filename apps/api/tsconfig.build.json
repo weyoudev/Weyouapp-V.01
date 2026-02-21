@@ -4,7 +4,7 @@
     "declaration": true,
     "sourceMap": true,
     "outDir": "dist",
-    "rootDir": "../..",
+    "rootDir": "src",
     "baseUrl": ".",
     "types": ["node"],
     "paths": {
@@ -13,17 +13,13 @@
       "@prisma/client/*": ["src/infra/generated/prisma-client/*"]
     }
   },
-  "include": [
-    "src/**/*.ts",
-    "../../packages/shared/src/**/*.ts"
-  ],
+  "include": ["src"],
   "exclude": [
+    "node_modules",
+    "dist",
+    "test",
     "**/*.spec.ts",
     "**/*.test.ts",
-    "**/__tests__/**",
-    "test",
-    "test/**",
-    "node_modules",
-    "dist"
+    "**/__tests__/**"
   ]
 }
