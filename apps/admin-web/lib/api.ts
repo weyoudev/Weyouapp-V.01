@@ -79,10 +79,11 @@ export function getFriendlyErrorMessage(error: unknown): string {
   }
   if (axios.isAxiosError(error) && (error.code === 'ERR_NETWORK' || !error.response)) {
     const isRemoteApi = baseURL.startsWith('https://') || baseURL.includes('onrender.com');
+    const cacheHint = ' To load the correct API URL, clear the Next cache: from repo root run npm run dev:fresh -w admin-web, or delete apps/admin-web/.next and restart the dev server.';
     if (isRemoteApi) {
-      return `Cannot reach the API at ${baseURL}. If using Render: wait 30–60s (cold start) then refresh, or check the Render dashboard. Ensure NEXT_PUBLIC_API_URL in apps/admin-web/.env.local is exactly https://weyou-api.onrender.com/api and restart the dev server (stop, then npm run dev:admin). Clear the Next cache if needed: delete apps/admin-web/.next and restart.`;
+      return `Cannot reach the API at ${baseURL}. If using Render: wait 30–60s (cold start) then refresh, or check the Render dashboard. Ensure .env.local has NEXT_PUBLIC_API_URL=https://weyou-api.onrender.com/api.${cacheHint}`;
     }
-    return `Cannot connect to the API at ${baseURL}. Start the API (npm run dev:api) or set NEXT_PUBLIC_API_URL in apps/admin-web/.env.local to https://weyou-api.onrender.com/api for Render. Restart the dev server after changing .env.local.`;
+    return `Cannot connect to the API at ${baseURL}. For local API run npm run dev:api from repo root. For Render set NEXT_PUBLIC_API_URL=https://weyou-api.onrender.com/api in apps/admin-web/.env.local.${cacheHint}`;
   }
   if (api.status === 401) {
     return 'Invalid email or password. Check that the user exists with role Admin/Billing/OPS and the password is correct.';
