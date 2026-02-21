@@ -8,7 +8,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatMoney } from '@/lib/format';
@@ -50,8 +49,19 @@ export function RevenueLineChart({ points, isLoading }: RevenueLineChartProps) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={320}>
-      <LineChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+    <div className="space-y-2">
+      <div className="flex justify-end gap-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-4 rounded bg-[hsl(var(--chart-1))]" />
+          Collected
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-4 rounded bg-[hsl(var(--chart-2))]" />
+          Billed
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={320}>
+        <LineChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis
           dataKey="dateLabel"
@@ -83,7 +93,6 @@ export function RevenueLineChart({ points, isLoading }: RevenueLineChartProps) {
             );
           }}
         />
-        <Legend />
         <Line
           type="monotone"
           dataKey="collectedPaise"
@@ -100,7 +109,8 @@ export function RevenueLineChart({ points, isLoading }: RevenueLineChartProps) {
           strokeWidth={2}
           dot={false}
         />
-      </LineChart>
-    </ResponsiveContainer>
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
