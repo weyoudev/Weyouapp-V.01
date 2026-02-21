@@ -69,6 +69,24 @@ No CORS issues because both are on the same domain.
 
 Vercel returns **404 NOT_FOUND** when the request path does not match any resource: no static file and no serverless function at that path (and no rewrite sending the request to a function). For the **API-only** project, only paths rewritten to `/api/index` in `vercel-api-only.json` are handled (`/`, `/api`, `/api/:path*`). If you see 404, check the URL, that **Configuration File** is `vercel-api-only.json`, and that you redeployed after changing config.
 
+### 404 on the API-only project – checklist
+
+1. **Use the API project URL**  
+   You must open the **API** project’s URL (e.g. `https://weyou-api-xxx.vercel.app`), not the Admin project’s URL. The Admin project only serves the UI and has no `/api` routes.
+
+2. **Test `/api/health` first**  
+   Open **`https://<your-api-project>.vercel.app/api/health`** in a browser. You should get JSON: `{"status":"ok","source":"api/health.js"}`.  
+   - If you get that → the API project and config are correct; use this base URL for the Admin’s `NEXT_PUBLIC_API_URL` (e.g. `https://weyou-api-xxx.vercel.app/api`).  
+   - If you still get 404 → the project is not using the API config or the repo root.
+
+3. **API project settings (must match)**  
+   - **Root Directory:** leave **empty** (repo root). If set to `apps/admin-web` or anything else, the `api/` folder is not in the project and every request 404s.  
+   - **Configuration File:** set to **`vercel-api-only.json`** (Settings → General).  
+   - **Framework Preset:** **Other** (so Vercel uses your config, not Next.js auto-detect).
+
+4. **Redeploy after any change**  
+   Change config or env → Save → **Deployments → … → Redeploy** (or push a new commit).
+
 ---
 
 ## 404 on root or “can’t see any UI”
