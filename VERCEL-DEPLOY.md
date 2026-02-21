@@ -2,6 +2,22 @@
 
 You can use **one project** (Admin + API on the same domain) or **two projects** (separate domains).
 
+## Fix 404 on production URL (one project)
+
+If deployment succeeds but visiting the production URL shows **404: NOT_FOUND**:
+
+1. **Root Directory must be empty**  
+   **Project → Settings → General → Root Directory**: leave **blank**. If set to `apps/admin-web` or anything else, Vercel uses that as the project root and **ignores** the repo root `vercel.json`. The API and routing from the root config are then not applied, and the root `/` may 404.
+
+2. **Framework Preset: Other**  
+   **Settings → General → Framework Preset**: set to **Other**. If set to Next.js, Vercel may use its own build and ignore the root `vercel.json` `buildCommand` and `builds`, so the Next.js app from the monorepo might not be the one serving `/`.
+
+3. **Do not use API-only config for the main URL**  
+   If **Configuration File** is set to `vercel-api-only.json`, the project builds only the API; there is no Next.js app, so `/` returns 404. Use that only for a separate API-only project. For one URL with login and UI, leave Configuration File blank (use root `vercel.json`).
+
+4. **Redeploy**  
+   After changing any of the above, **Deployments → … → Redeploy** (or push a new commit).
+
 ---
 
 ## Get login and full UI working (one URL)

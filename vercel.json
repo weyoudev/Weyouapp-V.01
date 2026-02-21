@@ -4,8 +4,19 @@
   "buildCommand": "node scripts/vercel-build-conditional.js",
   "installCommand": "npm ci",
   "builds": [
-    { "src": "apps/admin-web/package.json", "use": "@vercel/next" },
-    { "src": "api/index.js", "use": "@vercel/node" }
+    {
+      "src": "apps/admin-web/package.json",
+      "use": "@vercel/next"
+    },
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node"
+    }
   ],
-  "rewrites": [{ "source": "/api/:path*", "destination": "/api/index/:path*" }]
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index/:path*"
+    }
+  ]
 }
