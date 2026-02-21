@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { getStoredUser } from '@/lib/auth';
 import { useAnalyticsRevenue, useDashboardKpis } from '@/hooks/useAnalytics';
 import { useOrders } from '@/hooks/useOrders';
 import { useBranches } from '@/hooks/useBranches';
@@ -51,8 +52,17 @@ function getDayLabel(dateKey: string, todayKey: string): string {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([]);
+  const user = useMemo(() => getStoredUser(), []);
+  const role = user?.role ?? 'CUSTOMER';
+  const isBranchHead = role === 'OPS' && !!user?.branchId;
+  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(() =>
+    isBranchHead && user?.branchId ? [user.branchId] : []
+  );
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+
+  useEffect(() => {
+    if (isBranchHead && user?.branchId) setSelectedBranchIds([user.branchId]);
+  }, [isBranchHead, user?.branchId]);
 
   const todayKey = useMemo(() => getTodayIST(), []);
   const pickupDateFrom = useMemo(() => {
@@ -69,7 +79,9 @@ export default function DashboardPage() {
   const { data, isLoading, error } = useAnalyticsRevenue({ preset: 'TODAY' });
   const { data: kpis, isLoading: kpisLoading, error: kpisError } = useDashboardKpis();
   const { data: branches = [] } = useBranches();
-  const effectiveBranchId = selectedBranchIds.length === 1 ? selectedBranchIds[0] : undefined;
+  const effectiveBranchId = isBranchHead
+    ? (user?.branchId ?? undefined)
+    : (selectedBranchIds.length === 1 ? selectedBranchIds[0] : undefined);
 
   const { data: ordersData, isLoading: ordersLoading } = useOrders(
     {
@@ -118,6 +130,7 @@ export default function DashboardPage() {
           selectedBranchIds={selectedBranchIds}
           onChange={setSelectedBranchIds}
           compactLabel
+          disabled={isBranchHead}
         />
       </div>
 
