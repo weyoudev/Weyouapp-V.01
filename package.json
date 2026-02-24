@@ -44,7 +44,8 @@
     "dev:admin:fresh": "node -e \"const fs=require('fs'); const path=require('path'); const p=path.join('apps','admin-web','.next'); try { fs.rmSync(p, { recursive: true }); } catch (_) {}\" && npm run dev:admin",
     "dev:customer": "npm run dev -w customer-web",
     "dev:customer-mobile": "cd apps/customer-mobile && npx expo start",
-    "dev:customer-mobile:clear": "cd apps/customer-mobile && npx expo start -c"
+    "dev:customer-mobile:clear": "cd apps/customer-mobile && npx expo start -c",
+    "build:customer-mobile:apk": "cd apps/customer-mobile && npx eas build --platform android --profile preview"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

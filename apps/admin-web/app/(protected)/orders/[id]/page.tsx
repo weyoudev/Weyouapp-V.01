@@ -105,7 +105,8 @@ export default function OrderDetailPage() {
   // Hydrate ACK form from saved invoice when summary loads; or default order mode from order type
   useEffect(() => {
     if (!summary) return;
-    const ack = summary.invoices.find((i) => i.type === 'ACKNOWLEDGEMENT');
+    const invList = Array.isArray(summary.invoices) ? summary.invoices : [];
+    const ack = invList.find((i) => i.type === 'ACKNOWLEDGEMENT');
     if (ack) {
       if (!hasHydratedAck.current) {
         hasHydratedAck.current = true;
@@ -152,8 +153,9 @@ export default function OrderDetailPage() {
   // Hydrate final invoice form from saved final invoice when it exists; else prefill from ACK once
   useEffect(() => {
     if (!summary || hasPrefilledFinal.current) return;
-    const finalInv = summary.invoices.find((i) => i.type === 'FINAL');
-    const ack = summary.invoices.find((i) => i.type === 'ACKNOWLEDGEMENT');
+    const invList = Array.isArray(summary.invoices) ? summary.invoices : [];
+    const finalInv = invList.find((i) => i.type === 'FINAL');
+    const ack = invList.find((i) => i.type === 'ACKNOWLEDGEMENT');
     if (finalInv?.items?.length) {
       hasPrefilledFinal.current = true;
       hasHydratedFinal.current = true;
@@ -217,8 +219,9 @@ export default function OrderDetailPage() {
   // After ACK is submitted (ISSUED), sync Final invoice form from ACK so "same is added to Final Invoices"
   useEffect(() => {
     if (!summary) return;
-    const ack = summary.invoices.find((i) => i.type === 'ACKNOWLEDGEMENT');
-    const finalInv = summary.invoices.find((i) => i.type === 'FINAL');
+    const invList = Array.isArray(summary.invoices) ? summary.invoices : [];
+    const ack = invList.find((i) => i.type === 'ACKNOWLEDGEMENT');
+    const finalInv = invList.find((i) => i.type === 'FINAL');
     if (ack?.status !== 'ISSUED' || finalInv?.items?.length) return;
 
     const ackKg = (ack as { subscriptionUsageKg?: number | null }).subscriptionUsageKg;
@@ -259,7 +262,8 @@ export default function OrderDetailPage() {
   // Prefill payment amount from final invoice total when order is delivered
   useEffect(() => {
     if (!summary || summary.order?.status !== 'DELIVERED') return;
-    const total = summary.invoices.find((i) => i.type === 'FINAL')?.total;
+    const invList = Array.isArray(summary.invoices) ? summary.invoices : [];
+    const total = invList.find((i) => i.type === 'FINAL')?.total;
     if (total != null && total > 0 && paymentAmountRupees === '') {
       setPaymentAmountRupees(total / 100);
     }
@@ -302,8 +306,11 @@ export default function OrderDetailPage() {
     );
   }
 
-  const ackInvoice = summary.invoices.find((i) => i.type === 'ACKNOWLEDGEMENT');
-  const finalInvoice = summary.invoices.find((i) => i.type === 'FINAL');
+  const invoices = Array.isArray(summary.invoices) ? summary.invoices : [];
+  const ackInvoice = invoices.find((i) => i.type === 'ACKNOWLEDGEMENT');
+  const finalInvoice = invoices.find((i) => i.type === 'FINAL');
+  const customer = summary.customer ?? { id: '', name: null, phone: null, email: null };
+  const address = summary.address ?? { id: '', label: '', addressLine: '', pincode: '' };
   const isDelivered = order.status === 'DELIVERED';
   const canIssueFinalInvoice =
     order.status === 'OUT_FOR_DELIVERY' ||
@@ -667,8 +674,8 @@ export default function OrderDetailPage() {
       <nav className="flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/customers" className="hover:text-foreground transition-colors">Customers</Link>
         <span aria-hidden>/</span>
-        <Link href={`/customers/${summary.customer.id}`} className="hover:text-foreground transition-colors">
-          {summary.customer.name ?? 'Customer'}
+        <Link href={customer.id ? `/customers/${customer.id}` : '#'} className="hover:text-foreground transition-colors">
+          {customer.name ?? 'Customer'}
         </Link>
         <span aria-hidden>/</span>
         <span className="text-foreground font-medium">Order</span>
@@ -703,17 +710,17 @@ export default function OrderDetailPage() {
         <div className="rounded-lg border bg-muted/40 p-4">
           <h3 className="text-sm font-medium text-muted-foreground mb-2">Customer & address</h3>
           <div className="space-y-2 text-sm">
-            <p className="font-medium">{summary.customer.name ?? '—'}</p>
-            <p>{summary.customer.phone ?? '—'}</p>
-            <p>{summary.customer.email ?? '—'}</p>
+            <p className="font-medium">{customer.name ?? '—'}</p>
+            <p>{customer.phone ?? '—'}</p>
+            <p>{customer.email ?? '—'}</p>
             {order.orderSource === 'WALK_IN' ? (
               <p className="text-muted-foreground">Walk-in</p>
             ) : (
               <>
                 <hr className="border-muted" />
-                <p>{summary.address.label}</p>
-                <p>{summary.address.addressLine}</p>
-                <p>{summary.address.pincode}</p>
+                <p>{address.label}</p>
+                <p>{address.addressLine}</p>
+                <p>{address.pincode}</p>
               </>
             )}
           </div>
@@ -918,8 +925,8 @@ export default function OrderDetailPage() {
           <div className="flex flex-wrap gap-4 items-start rounded-md bg-muted/40 p-3 text-sm">
             <div className="flex-1 min-w-[200px]">
               <p className="font-medium mb-1">Order details</p>
-              <p>{summary.customer.name ?? '—'}</p>
-              <p className="text-muted-foreground">Phone: {summary.customer.phone ?? '—'}</p>
+              <p>{customer.name ?? '—'}</p>
+              <p className="text-muted-foreground">Phone: {customer.phone ?? '—'}</p>
               {order.orderType === 'SUBSCRIPTION' ? (
                 <p className="text-muted-foreground">
                   Subscription booking{summary.subscription?.planName ? ` (${summary.subscription.planName})` : ''}
@@ -930,7 +937,7 @@ export default function OrderDetailPage() {
                 </p>
               )}
               {order.orderSource !== 'WALK_IN' && (
-                <p>{summary.address.addressLine}, {summary.address.pincode}</p>
+                <p>{address.addressLine}, {address.pincode}</p>
               )}
               <p className="text-muted-foreground">
                 Pickup: {formatDate(order.pickupDate)} {order.timeWindow}
@@ -1262,8 +1269,8 @@ export default function OrderDetailPage() {
           <div className="flex flex-wrap gap-4 items-start rounded-md bg-muted/40 p-3 text-sm">
             <div className="flex-1 min-w-[200px]">
               <p className="font-medium mb-1">Order details</p>
-              <p>{summary.customer.name ?? '—'}</p>
-              <p className="text-muted-foreground">Phone: {summary.customer.phone ?? '—'}</p>
+              <p>{customer.name ?? '—'}</p>
+              <p className="text-muted-foreground">Phone: {customer.phone ?? '—'}</p>
               {order.orderType === 'SUBSCRIPTION' ? (
                 <p className="text-muted-foreground">
                   Subscription booking{summary.subscription?.planName ? ` (${summary.subscription.planName})` : ''}
@@ -1274,7 +1281,7 @@ export default function OrderDetailPage() {
                 </p>
               )}
               {order.orderSource !== 'WALK_IN' && (
-                <p>{summary.address.addressLine}, {summary.address.pincode}</p>
+                <p>{address.addressLine}, {address.pincode}</p>
               )}
               <p className="text-muted-foreground">
                 Pickup: {formatDate(order.pickupDate)} {order.timeWindow}
@@ -1485,7 +1492,7 @@ export default function OrderDetailPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Final invoice total: {formatMoney(finalInvoice?.total ?? summary.invoices.find((i) => i.type === 'FINAL')?.total ?? 0)}
+                Final invoice total: {formatMoney(finalInvoice?.total ?? 0)}
               </p>
             </div>
           )}
