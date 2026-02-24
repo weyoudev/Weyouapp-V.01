@@ -13,6 +13,7 @@ function getContentType(filePath: string): string {
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
   };
   return map[ext] ?? 'application/octet-stream';
 }

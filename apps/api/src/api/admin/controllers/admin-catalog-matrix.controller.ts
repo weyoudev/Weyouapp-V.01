@@ -1,4 +1,5 @@
-import { Controller, Get, Put, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Post, Patch, Delete, Param, Body, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@shared/enums';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -10,6 +11,11 @@ import { CreateSegmentCategoryDto } from '../dto/create-segment-category.dto';
 import { PatchServiceCategoryDto } from '../dto/patch-service-category.dto';
 import { PatchSegmentCategoryDto } from '../dto/patch-segment-category.dto';
 import { ImportCatalogDto } from '../dto/import-catalog.dto';
+
+interface MulterUploadFile {
+  buffer?: Buffer;
+  originalname?: string;
+}
 
 @Controller('admin/catalog')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -182,6 +188,18 @@ export class AdminCatalogMatrixController {
   async deleteSegmentCategory(@Param('id') id: string) {
     await this.adminCatalogService.deleteSegmentCategory(id);
     return { success: true };
+  }
+
+  @Post('icon/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadCatalogIcon(@UploadedFile() file: MulterUploadFile) {
+    if (!file?.buffer) {
+      throw new BadRequestException('File is required');
+    }
+    return this.adminCatalogService.uploadCatalogIcon(
+      file.buffer,
+      file.originalname ?? 'icon.png',
+    );
   }
 
   @Post('import')

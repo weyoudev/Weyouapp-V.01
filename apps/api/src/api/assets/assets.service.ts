@@ -70,4 +70,23 @@ export class AssetsService {
         : 'application/octet-stream';
     return { stream, contentType };
   }
+
+  /** Catalog item custom icons: pathKey = catalog-icons/:fileName */
+  async getCatalogIconStream(
+    fileName: string,
+  ): Promise<{ stream: Readable; contentType: string }> {
+    if (!safeFileName(fileName)) {
+      throw new AppError('ASSET_NOT_FOUND', 'Invalid asset name');
+    }
+    const pathKey = `catalog-icons/${fileName}`;
+    const stream = await this.storageAdapter.getObjectStream(pathKey);
+    if (!stream) {
+      throw new AppError('ASSET_NOT_FOUND', 'Asset not found', { fileName });
+    }
+    const contentType =
+      'getContentTypeForPath' in this.storageAdapter
+        ? (this.storageAdapter as StorageAdapter & { getContentTypeForPath(p: string): string }).getContentTypeForPath(pathKey)
+        : 'application/octet-stream';
+    return { stream, contentType };
+  }
 }
